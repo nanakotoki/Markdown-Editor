@@ -13,6 +13,7 @@ import HandwritingModal from './components/Builders/HandwritingModal'
 import SymbolPalette from './components/Builders/SymbolPalette'
 import MacroDrawer from './components/Builders/MacroDrawer'
 import AIAssistantModal from './components/Builders/AIAssistantModal'
+import ManualModal from './components/Layout/ManualModal'
 import { Button, Modal } from './components/ui'
 import { mergeWorkspaceBib, useEditorStore, workspaceRefEntries } from './store/useEditorStore'
 import { macrosToKatex } from './core/katexSafeRender'
@@ -49,6 +50,18 @@ export default function App() {
   useEffect(() => {
     void boot()
   }, [boot])
+
+  /* ---------------- F1：随时唤出语法手册 ---------------- */
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'F1') return
+      e.preventDefault()
+      const s = useEditorStore.getState()
+      s.openModal(s.modal === 'manual' ? null : 'manual')
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
@@ -309,6 +322,7 @@ function Modals({
       <MacroDrawer open={modal === 'macro'} onClose={() => openModal(null)} />
       <AIAssistantModal open={modal === 'ai'} onClose={() => openModal(null)} seed={seed.kind === 'ai' ? seed.latex : ''} />
       <ExportModal open={modal === 'export'} onClose={() => openModal(null)} />
+      <ManualModal open={modal === 'manual'} onClose={() => openModal(null)} />
 
       <Modal
         open={modal === 'cheatsheet'}

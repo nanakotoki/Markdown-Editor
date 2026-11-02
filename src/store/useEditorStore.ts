@@ -39,6 +39,7 @@ export type ModalName =
   | 'export'
   | 'bib'
   | 'cheatsheet'
+  | 'manual'
   | 'search'
   | null
 
@@ -223,6 +224,8 @@ interface EditorState {
   reloadDoc: (id: string) => Promise<void>
   createLocalDoc: (dir?: string, name?: string) => Promise<string | null>
   deleteLocalDoc: (id: string) => Promise<void>
+  /** 按路径删除（文件树右键用：未打开过的文件不在 docs 里） */
+  deleteLocalPath: (path: string) => Promise<void>
   renameLocalDoc: (id: string, name: string) => Promise<void>
   applyExternalChange: (paths: string[]) => void
   workspaceRefs: () => RefEntry[]
@@ -514,6 +517,23 @@ export const useEditorStore = create<EditorState>()(
           const name = doc.filePath.split('/').pop()
           get().showToast(`已移入 .mathflow-trash（可恢复）：${name}`, 'success')
           void res
+        } catch (e: any) {
+          get().showToast(e?.message ?? '删除失败', 'warn')
+        }
+      },
+
+      deleteLocalPath: async (path) => {
+        const id = pathToDocId(path)
+        const opened = get().docs.find((d) => d.id === id || d.filePath === path)
+        if (opened) {
+          await get().deleteLocalDoc(opened.id)
+          return
+        }
+        try {
+          await apiDeleteFile(path)
+          await get().refreshTree()
+          void get().refreshIndex()
+          get().showToast(`已移入 .mathflow-trash（可恢复）：${baseName(path)}`, 'success')
         } catch (e: any) {
           get().showToast(e?.message ?? '删除失败', 'warn')
         }

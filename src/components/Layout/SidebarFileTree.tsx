@@ -1,16 +1,20 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   BookMarked,
   ChevronRight,
+  Copy,
   FileCode2,
+  FilePlus2,
   FileText,
   Folder,
   FolderOpen,
   FolderUp,
+  PencilLine,
   Plus,
   RefreshCw,
+  Trash2,
 } from 'lucide-react'
-import { parentDir, pathToDocId, type TreeNode } from '../../core/workspaceApi'
+import { baseName, parentDir, pathToDocId, type TreeNode } from '../../core/workspaceApi'
 import { useEditorStore } from '../../store/useEditorStore'
 
 /**
@@ -20,8 +24,11 @@ import { useEditorStore } from '../../store/useEditorStore'
  *  这里展示的就是工作区目录的真实结构：新建文件直接落盘，点击即读取。
  *  目录默认展开，折叠状态记在组件本地（不需要持久化）。
  *
- *  刻意没有做拖拽移动和右键菜单——那些操作误触代价高，改用更保守的方式：
- *  重命名在标签栏双击文件名，删除走「移入回收站」并给 toast 提示。
+ *  交互约定：
+ *   · 单击 = 打开（目录则是展开/折叠），双击 = 重命名
+ *   · 右键 = 上下文菜单：打开 / 重命名 / 在此新建 / 复制路径 / 移到回收站
+ *   · 删除不是真删，服务端会把它挪进工作区的 .mathflow-trash/<时间戳>/，
+ *     目录结构和原文件都在，误删可以手工挪回来
  * ============================================================================
  */
 
@@ -37,11 +44,28 @@ function iconFor(node: TreeNode, open: boolean) {
   return <FileText size={12} className="text-ink-300" />
 }
 
+interface MenuState {
+  x: number
+  y: number
+  node: TreeNode
+}
+
 export default function SidebarFileTree() {
-  const { tree, activeDocId, docs, openFile, refreshTree, createLocalDoc, workspace, showToast, renameLocalDoc } =
-    useEditorStore()
+  const {
+    tree,
+    activeDocId,
+    docs,
+    openFile,
+    refreshTree,
+    createLocalDoc,
+    deleteLocalPath,
+    workspace,
+    showToast,
+    renameLocalDoc,
+  } = useEditorStore()
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   const [busy, setBusy] = useState(false)
+  const [menu, setMenu] = useState<MenuState | null>(null)
 
   const activePath = docs.find((d) => d.id === activeDocId)?.filePath ?? null
   const total = useMemo(() => countDocs(tree), [tree])
@@ -61,6 +85,31 @@ export default function SidebarFileTree() {
     setBusy(false)
   }
 
+  const rename = (node: TreeNode) => {
+    const next = window.prompt('重命名（含后缀）', node.name)
+    if (!next || next === node.name) return
+    void renameLocalDoc(pathToDocId(node.path), next)
+  }
+
+  const remove = async (node: TreeNode) => {
+    if (node.type === 'dir') {
+      const ok = window.confirm(
+        `把整个文件夹「${node.name}」移到回收站？\n\n里面的文件会一起进去，可在工作区的 .mathflow-trash 里找回。`
+      )
+      if (!ok) return
+    }
+    await deleteLocalPath(node.path)
+  }
+
+  const copyPath = async (node: TreeNode) => {
+    try {
+      await navigator.clipboard.writeText(node.path)
+      showToast(`已复制路径：${node.path}`, 'success')
+    } catch {
+      showToast('浏览器不允许写剪贴板', 'warn')
+    }
+  }
+
   const renderNodes = (nodes: TreeNode[], depth: number): React.ReactNode =>
     nodes.map((node) => {
       const isDir = node.type === 'dir'
@@ -78,17 +127,18 @@ export default function SidebarFileTree() {
               else showToast('这个格式不能在编辑器里打开', 'info')
             }}
             onDoubleClick={() => {
-              if (isDir) return
-              const next = window.prompt('重命名（含后缀）', node.name)
-              if (!next || next === node.name) return
-              const id = pathToDocId(node.path)
-              void renameLocalDoc(id, next)
+              if (!isDir) rename(node)
+            }}
+            onContextMenu={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              setMenu({ x: e.clientX, y: e.clientY, node })
             }}
             className={`flex cursor-pointer items-center gap-1 rounded-md py-[3px] pr-1.5 text-[12px] transition ${
               isActive ? 'bg-accent-50 font-medium text-accent-800 ring-1 ring-accent-100' : 'text-ink-600 hover:bg-ink-50'
             }`}
             style={{ paddingLeft: 6 + depth * 11 }}
-            title={node.path}
+            title={`${node.path}\n右键：重命名 / 新建 / 删除`}
           >
             {isDir ? (
               <ChevronRight
@@ -137,9 +187,122 @@ export default function SidebarFileTree() {
 
       <div className="space-y-0.5">{tree.length ? renderNodes(tree, 0) : <EmptyTree />}</div>
 
-      <div className="pt-2 text-[10.5px] text-ink-300">
-        共 {total} 篇文档 · 双击文件可重命名
+      <div className="pt-2 text-[10.5px] leading-relaxed text-ink-300">
+        共 {total} 篇文档 · 单击打开，双击重命名
+        <br />
+        右键可删除（移入回收站，不是真删）
       </div>
+
+      {menu && (
+        <TreeContextMenu
+          menu={menu}
+          readonly={Boolean(workspace?.readonly)}
+          onClose={() => setMenu(null)}
+          items={[
+            ...(menu.node.type === 'file' && isDoc(menu.node)
+              ? [{ icon: <FileText size={12} />, label: '打开', run: () => void openFile(menu.node.path) }]
+              : []),
+            ...(menu.node.type === 'file'
+              ? [{ icon: <PencilLine size={12} />, label: '重命名', run: () => rename(menu.node) }]
+              : []),
+            {
+              icon: <FilePlus2 size={12} />,
+              label: '在此新建文档',
+              run: () => void createLocalDoc(menu.node.type === 'dir' ? menu.node.path : parentDir(menu.node.path)),
+            },
+            { icon: <Copy size={12} />, label: '复制相对路径', run: () => void copyPath(menu.node) },
+            { divider: true },
+            {
+              icon: <Trash2 size={12} />,
+              label: '移到回收站',
+              danger: true,
+              run: () => void remove(menu.node),
+            },
+          ]}
+        />
+      )}
+    </div>
+  )
+}
+
+interface MenuItem {
+  icon?: React.ReactNode
+  label?: string
+  danger?: boolean
+  divider?: boolean
+  run?: () => void
+}
+
+function TreeContextMenu({
+  menu,
+  items,
+  readonly,
+  onClose,
+}: {
+  menu: MenuState
+  items: MenuItem[]
+  readonly: boolean
+  onClose: () => void
+}) {
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const onDown = (e: MouseEvent) => {
+      if (!ref.current?.contains(e.target as Node)) onClose()
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('mousedown', onDown)
+    window.addEventListener('keydown', onKey)
+    window.addEventListener('resize', onClose)
+    window.addEventListener('wheel', onClose, { passive: true })
+    return () => {
+      window.removeEventListener('mousedown', onDown)
+      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('resize', onClose)
+      window.removeEventListener('wheel', onClose)
+    }
+  }, [onClose])
+
+  // 贴近右/下边界时往回收，避免菜单被裁掉
+  const width = 190
+  const height = items.length * 30 + 16
+  const left = Math.max(8, Math.min(menu.x, window.innerWidth - width - 8))
+  const top = Math.max(8, Math.min(menu.y, window.innerHeight - height - 8))
+
+  return (
+    <div
+      ref={ref}
+      className="fixed z-[60] w-[190px] rounded-xl border border-ink-200 bg-white p-1 shadow-panel"
+      style={{ left, top }}
+      role="menu"
+      onContextMenu={(e) => e.preventDefault()}
+    >
+      <div className="truncate px-2 py-1 text-[10.5px] text-ink-400" title={menu.node.path}>
+        {baseName(menu.node.path)}
+      </div>
+      {items.map((it, i) =>
+        it.divider ? (
+          <div key={`d${i}`} className="my-1 h-px bg-ink-100" />
+        ) : (
+          <button
+            key={it.label}
+            role="menuitem"
+            disabled={readonly && it.danger}
+            onClick={() => {
+              onClose()
+              it.run?.()
+            }}
+            className={`flex w-full items-center gap-2 rounded-lg px-2 py-[6px] text-left text-[12px] transition disabled:cursor-not-allowed disabled:opacity-40 ${
+              it.danger ? 'text-rose-600 hover:bg-rose-50' : 'text-ink-600 hover:bg-ink-50'
+            }`}
+          >
+            <span className={it.danger ? 'text-rose-400' : 'text-ink-400'}>{it.icon}</span>
+            {it.label}
+          </button>
+        )
+      )}
     </div>
   )
 }

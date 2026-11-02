@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import {
   AlignLeft,
   BookMarked,
+  BookOpen,
   Blocks,
   Braces,
   Columns2,
@@ -10,6 +11,7 @@ import {
   FunctionSquare,
   Grid3x3,
   Hand,
+  HelpCircle,
   Keyboard,
   Library,
   LineChart,
@@ -191,6 +193,7 @@ export default function HeaderToolbar({
           { label: '手写公式画板 / 截图识别', icon: <PenTool size={13} />, onClick: () => openModal('hand') },
           { label: '函数绘图 / 矩阵计算', icon: <LineChart size={13} />, onClick: () => onRequestBuilder('plot') },
           { label: '快捷输入速查', icon: <Keyboard size={13} />, onClick: onShowCheatsheet },
+          { label: '语法与使用手册（F1）', icon: <BookOpen size={13} />, onClick: () => openModal('manual') },
           { label: 'AI 公式助手', icon: <Sparkles size={13} />, onClick: () => onRequestBuilder('ai') },
         ]}
       />
@@ -220,6 +223,10 @@ export default function HeaderToolbar({
 
       <Button variant="ghost" size="sm" onClick={() => openModal('hand')} title="手写画板">
         <Hand size={14} />
+      </Button>
+
+      <Button variant="ghost" size="sm" onClick={() => openModal('manual')} title="语法与使用手册（F1）">
+        <HelpCircle size={14} />
       </Button>
 
       <Button variant="primary" onClick={onExport}>
