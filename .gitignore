@@ -1,0 +1,26 @@
+# 依赖与构建产物
+node_modules/
+dist/
+release/
+tsconfig.tsbuildinfo
+server/lib/
+server/generated/
+build/
+
+# 本地调试
+tmp/
+*.log
+
+# 打包验证 / 演示工作区
+.ziptest*/
+.demo/
+.test-ws/
+
+# 编辑器 / 系统
+.DS_Store
+.idea/
+.vscode/
+*.local
+
+# AI 助手的本地记忆与项目数据
+.workbuddy/

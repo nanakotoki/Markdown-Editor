@@ -1,0 +1,12 @@
+# 统一换行符，避免 Windows 上 checkout 后脚本变成 CRLF
+* text=auto eol=lf
+
+# Windows 批处理必须 CRLF
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
+# 二进制
+*.png binary
+*.ico binary
+*.zip binary
+*.exe binary

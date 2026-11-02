@@ -1,0 +1,203 @@
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { renderMarkdown, buildPreviewMap, type RefEntry, type RenderResult } from '../../core/renderMarkdown'
+import type { MacroMap } from '../../core/katexSafeRender'
+import { useEditorStore, type BibEntry, type Settings } from '../../store/useEditorStore'
+
+/**
+ * ============================================================================
+ *  AcademicPreview.tsx —— 学术级全文预览
+ * ----------------------------------------------------------------------------
+ *  定理/证明容器 · booktabs 三线表 · 伪代码算法块 · 公式自动编号
+ *  · @引用点击跳转 · 悬停气泡预览（无需滚动页面）
+ * ============================================================================
+ */
+
+export interface AcademicPreviewProps {
+  content: string
+  macros: MacroMap
+  bib: BibEntry[]
+  settings: Settings
+  /** 工作区里其它文件的交叉引用索引（本地模式），用于解析跨文件引用 */
+  extRefs?: RefEntry[]
+  onRender?: (res: RenderResult) => void
+  className?: string
+}
+
+interface HoverCard {
+  x: number
+  y: number
+  title: string
+  detail: string
+  html: string
+  /** 跨文件引用时，点击会跳到这个文件 */
+  file?: string
+}
+
+export default function AcademicPreview({
+  content,
+  macros,
+  bib,
+  settings,
+  extRefs,
+  onRender,
+  className,
+}: AcademicPreviewProps) {
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const [hover, setHover] = useState<HoverCard | null>(null)
+
+  const result = useMemo(
+    () =>
+      renderMarkdown(content, {
+        macros,
+        bib,
+        autoNumber: settings.autoNumberEquations,
+        citationStyle: settings.citationStyle,
+        extRefs,
+      }),
+    [content, macros, bib, settings.autoNumberEquations, settings.citationStyle, extRefs]
+  )
+
+  const previews = useMemo(() => buildPreviewMap(result), [result])
+
+  useEffect(() => {
+    onRender?.(result)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [result])
+
+  /* 悬停气泡 */
+  useEffect(() => {
+    const root = scrollRef.current
+    if (!root) return
+    const onOver = (e: MouseEvent) => {
+      const target = (e.target as HTMLElement).closest('[data-ref-id]') as HTMLElement | null
+      if (!target) return
+      const kind = target.getAttribute('data-ref-kind') ?? ''
+      const id = target.getAttribute('data-ref-id') ?? ''
+      const entry = previews[`${kind}:${id}`]
+      const rect = target.getBoundingClientRect()
+      const rootRect = root.getBoundingClientRect()
+      setHover({
+        x: Math.max(12, Math.min(rect.left - rootRect.left, rootRect.width - 400)),
+        y: rect.bottom - rootRect.top + root.scrollTop + 8,
+        title: entry?.title || target.getAttribute('data-ref-title') || kind,
+        detail: entry?.detail || target.getAttribute('data-ref-detail') || '',
+        html: entry?.html ?? '',
+        file: target.getAttribute('data-mf-file') ?? undefined,
+      })
+    }
+    const onOut = (e: MouseEvent) => {
+      const target = (e.target as HTMLElement).closest('[data-ref-id]')
+      if (target) setHover(null)
+    }
+    root.addEventListener('mouseover', onOver)
+    root.addEventListener('mouseout', onOut)
+    return () => {
+      root.removeEventListener('mouseover', onOver)
+      root.removeEventListener('mouseout', onOut)
+    }
+  }, [previews])
+
+  /* 点击引用跳转 */
+  useEffect(() => {
+    const root = scrollRef.current
+    if (!root) return
+    const scrollToAnchor = (anchor: string) => {
+      if (!anchor) return
+      const el = root.querySelector(`#${CSS.escape(anchor)}`) as HTMLElement | null
+      if (!el) return
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      el.classList.add('mf-flash')
+      setTimeout(() => el.classList.remove('mf-flash'), 1500)
+    }
+    /** 跨文件引用：先切换到目标文件，等它渲染完再定位锚点 */
+    const jumpToFile = (file: string, anchor: string) => {
+      const store = useEditorStore.getState()
+      if (store.mode !== 'local') return
+      void store.openFile(file).then(() => {
+        if (!anchor) return
+        let tries = 0
+        const tick = () => {
+          const el = scrollRef.current?.querySelector(`#${CSS.escape(anchor)}`)
+          if (el) {
+            scrollToAnchor(anchor)
+            return
+          }
+          if (tries++ < 60) requestAnimationFrame(tick)
+        }
+        requestAnimationFrame(tick)
+      })
+    }
+    /** 把相对链接按当前文件所在目录解析成工作区相对路径 */
+    const resolveHref = (href: string) => {
+      const st = useEditorStore.getState()
+      const cur = st.docs.find((d) => d.id === st.activeDocId)?.filePath
+      if (!cur || href.startsWith('/')) return href.replace(/^\//, '')
+      const dir = cur.includes('/') ? cur.slice(0, cur.lastIndexOf('/')) : ''
+      const out: string[] = []
+      for (const part of `${dir}/${href}`.split('/')) {
+        if (!part || part === '.') continue
+        if (part === '..') out.pop()
+        else out.push(part)
+      }
+      return out.join('/')
+    }
+    const onClick = (e: MouseEvent) => {
+      const anchor = (e.target as HTMLElement).closest('a') as HTMLAnchorElement | null
+      if (!anchor) return
+
+      // 1) 交叉引用 / 文献引用
+      if (anchor.classList.contains('mf-ref') || anchor.classList.contains('mf-cite')) {
+        e.preventDefault()
+        const file = anchor.getAttribute('data-mf-file')
+        if (file) {
+          jumpToFile(file, anchor.getAttribute('data-mf-anchor') ?? '')
+          return
+        }
+        scrollToAnchor((anchor.getAttribute('href') ?? '').replace(/^#/, ''))
+        return
+      }
+
+      const href = anchor.getAttribute('href') ?? ''
+      if (!href || href.startsWith('#')) return
+
+      // 2) 指向其它 .md 的相对链接：切到那个文件，而不是让浏览器整页跳走
+      if (useEditorStore.getState().mode === 'local' && /\.(md|markdown|mdx)$/i.test(href) && !/^[a-z]+:\/\//i.test(href)) {
+        e.preventDefault()
+        jumpToFile(resolveHref(href), '')
+        return
+      }
+
+      // 3) 外部链接不劫持 SPA
+      if (/^https?:\/\//i.test(href)) {
+        e.preventDefault()
+        window.open(href, '_blank', 'noopener,noreferrer')
+      }
+    }
+    root.addEventListener('click', onClick)
+    return () => root.removeEventListener('click', onClick)
+  }, [])
+
+  return (
+    <div ref={scrollRef} className={`mf-preview-scroll relative h-full overflow-auto ${className ?? ''}`}>
+      <div className="mf-academic mx-auto max-w-[860px] px-10 pb-32 pt-8" dangerouslySetInnerHTML={{ __html: result.html }} />
+      {hover && (
+        <div
+          className="pointer-events-none absolute z-30 w-[380px] rounded-xl border border-ink-200 bg-white p-3 shadow-panel"
+          style={{ left: hover.x, top: hover.y }}
+        >
+          <div className="mb-1 flex items-baseline gap-2">
+            <span className="text-[12px] font-semibold text-accent-700">{hover.title}</span>
+            <span className="truncate text-[11px] text-ink-400">{hover.detail}</span>
+          </div>
+          {hover.html ? (
+            <div className="mf-hover-html overflow-auto text-[13px] text-ink-700" dangerouslySetInnerHTML={{ __html: hover.html }} />
+          ) : hover.file ? (
+            <div className="text-[11px] text-ink-400">点击跳转到该文件并定位到目标</div>
+          ) : (
+            <div className="text-[11px] text-ink-400">（该目标没有可预览的公式内容）</div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}

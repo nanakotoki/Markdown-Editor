@@ -1,0 +1,66 @@
+# electron-builder 配置
+#
+# 产物（release/installer/）：
+#   · MathFlow-Setup-1.0.0.exe   安装版：双击 → 选目录 → 桌面/开始菜单快捷方式 + 卸载器
+#   · MathFlow-便携版-1.0.0.exe   便携版：单文件，双击即用，不写注册表
+#
+# 构建：npm run dist
+
+appId: com.mathflow.desktop
+productName: MathFlow
+copyright: Copyright © 2026 MathFlow
+
+# 不开 asar：内嵌服务用 ESM 动态 import 读 server/ 与 dist/，明文目录最稳
+asar: false
+
+# 直接用本地已下载的 Electron 运行时，避免构建时再拉 100 MB
+electronDist: node_modules/electron/dist
+
+directories:
+  output: release/installer
+  buildResources: electron/resources
+
+files:
+  - dist/**/*
+  - server/**/*
+  - electron/**/*
+  - templates/**/*
+  - package.json
+  - '!**/node_modules/**'
+  - '!**/*.map'
+
+# 运行时不需要任何第三方包（remark / KaTeX 已打进 server/lib/engine.mjs）
+npmRebuild: false
+
+win:
+  icon: icon.ico
+  target:
+    - target: nsis
+      arch: [x64]
+  artifactName: MathFlow-Setup-${version}.${ext}
+  # 便携版单独用 portable target 定义
+  requestedExecutionLevel: asInvoker
+
+nsis:
+  # 有界面的标准安装向导（而不是一键静默装）
+  oneClick: false
+  # 装到当前用户目录，不弹 UAC，普通账号也能装
+  perMachine: false
+  allowElevation: true
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  shortcutName: MathFlow
+  uninstallDisplayName: MathFlow 学术编辑器
+  installerIcon: icon.ico
+  uninstallerIcon: icon.ico
+  installerHeaderIcon: icon.ico
+  license: license.txt
+  language: '2052' # 简体中文
+  runAfterFinish: true
+  deleteAppDataOnUninstall: false
+  differentialPackage: false
+
+portable:
+  artifactName: MathFlow-便携版-${version}.${ext}
+  unpackDirName: MathFlow

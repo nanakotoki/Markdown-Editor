@@ -1,0 +1,4 @@
+export/
+.mathflow-trash/
+node_modules/
+.DS_Store
