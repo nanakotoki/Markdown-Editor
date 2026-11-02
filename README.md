@@ -33,7 +33,7 @@ MathFlow 把「写作」和「公式」放在同一个光标里：正文用 Mark
 ### 方式一：安装版（Windows，推荐；要发给别人就发这个）
 
 ```
-release\installer\MathFlow-Setup-1.0.1.exe      （约 109 MB）
+release\installer\MathFlow-Setup-1.0.2.exe      （约 109 MB）
 ```
 
 双击 → 一路「下一步」→ 桌面和开始菜单出现 MathFlow 图标，双击即用。
@@ -51,7 +51,7 @@ release\installer\MathFlow-Setup-1.0.1.exe      （约 109 MB）
 ### 方式二：便携版（Windows，免安装）
 
 ```
-release\portable\MathFlow-Portable-1.0.1.exe      （约 109 MB）
+release\portable\MathFlow-Portable-1.0.2.exe      （约 109 MB）
 ```
 
 单文件，双击即用，不写注册表、不进「应用」列表，适合放 U 盘或没有安装权限的电脑。
@@ -65,13 +65,13 @@ release\portable\MathFlow-Portable-1.0.1.exe      （约 109 MB）
 
 ```
 发给别人/
-├── MathFlow-Setup-1.0.1.exe     安装版
-├── MathFlow-Portable-1.0.1.exe     便携版
+├── MathFlow-Setup-1.0.2.exe     安装版
+├── MathFlow-Portable-1.0.2.exe     便携版
 ├── 使用说明.txt                  给非技术用户的一页说明（含 SmartScreen 处理办法）
 └── SHA256.txt                    校验值，对方可自行核对
 ```
 
-对方只需要做一件事：双击 `MathFlow-Setup-1.0.1.exe`，下一步、下一步、完成。
+对方只需要做一件事：双击 `MathFlow-Setup-1.0.2.exe`，下一步、下一步、完成。
 
 重新生成这套产物（会依次做前端构建 → 图标 → 打包 → 归档）：
 
