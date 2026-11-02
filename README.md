@@ -13,7 +13,7 @@ MathFlow 把「写作」和「公式」放在同一个光标里：正文用 Mark
 | --- | --- | --- | --- |
 | **桌面客户端**（推荐） | 双击安装包，或直接跑 `MathFlow.exe` | 磁盘上的真实 `.md` 文件，默认 `文档\MathFlow` | 日常写作，像用本地软件一样，不用管浏览器和端口 |
 | **本地服务 + 浏览器** | `mathflow ~/论文` | 磁盘上的真实 `.md` 文件 | 习惯浏览器、或想局域网内多设备访问 |
-| **网页版** | 直接打开部署好的页面 | 浏览器 `localStorage` | 快速试用、跨设备随手写、无需安装 |
+| **网页版** | 打开 https://nanakotoki.github.io/Markdown-Editor/ | 浏览器 `localStorage` | 快速试用、跨设备随手写、无需安装 |
 
 * 三种形态编辑的是**同一批文件**：桌面客户端和命令行服务都直接读写磁盘，
   网页版则存在浏览器里，二者互不干扰，可以随时切换。
@@ -473,9 +473,12 @@ templates/workspace/         # `mathflow init` 的模板工作区
 
 ## 发布
 
-**静态站点（GitHub Pages）**：仓库已带 `.github/workflows/pages.yml`，
+**静态站点（GitHub Pages）**：在线地址 **https://nanakotoki.github.io/Markdown-Editor/** ，
 推送到 `main` 后自动 `npm ci → typecheck → build → deploy`。
 构建用相对路径 `base: './'`，因此放在任何子路径下都能正常加载。
+
+> 首次启用需要在仓库 **Settings → Pages → Build and deployment → Source** 里选 **GitHub Actions**，
+> 否则 `deploy` 步骤会报 `Failed to create deployment (status: 404)`。配好一次即可。
 
 **桌面客户端（Electron）**：
 
