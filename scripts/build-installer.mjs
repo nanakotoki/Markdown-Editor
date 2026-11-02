@@ -9,7 +9,7 @@
  *
  * 产出：
  *   release/installer/MathFlow-Setup-<ver>.exe     安装版（桌面 + 开始菜单 + 卸载器）
- *   release/portable/MathFlow-便携版-<ver>.exe      便携版（单文件，工作区在 exe 旁）
+ *   release/portable/MathFlow-Portable-<ver>.exe     便携版（单文件，工作区在 exe 旁）
  *   release/发给别人/                               上述文件 + 使用说明 + 校验值
  */
 import { promises as fs } from 'node:fs'
@@ -105,7 +105,7 @@ await run(
 // ---------------------------------------------------------------- 归档
 const produced = (await fs.readdir(BUILD_DIR)).filter((f) => f.toLowerCase().endsWith('.exe'))
 const setup = produced.find((f) => /^MathFlow-Setup-/.test(f))
-const portable = produced.find((f) => /便携版/.test(f))
+const portable = produced.find((f) => /Portable/i.test(f))
 
 await fs.mkdir(OUT_SETUP, { recursive: true })
 await fs.mkdir(OUT_PORTABLE, { recursive: true })
@@ -141,7 +141,7 @@ MathFlow 是一个本地学术写作工具：正文写 Markdown，公式用 $...
 【MathFlow-Setup-${VERSION}.exe】  安装版，推荐给绝大多数人
   双击 → 下一步 → 完成。会出现在桌面和开始菜单，随时可卸载。
 
-【MathFlow-便携版-${VERSION}.exe】 免安装
+【MathFlow-Portable-${VERSION}.exe】 免安装
   双击即用，适合放 U 盘、或者没有安装权限的电脑。
   文稿会保存在这个 exe 旁边的 workspace 文件夹里，整个文件夹拷走就带走了全部内容。
   缺点：每次启动要解压，第一次启动约 5-10 秒。

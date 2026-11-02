@@ -62,5 +62,5 @@ nsis:
   differentialPackage: false
 
 portable:
-  artifactName: MathFlow-便携版-${version}.${ext}
+  artifactName: MathFlow-Portable-${version}.${ext}
   unpackDirName: MathFlow
