@@ -33,7 +33,7 @@ MathFlow 把「写作」和「公式」放在同一个光标里：正文用 Mark
 ### 方式一：安装版（Windows，推荐；要发给别人就发这个）
 
 ```
-release\installer\MathFlow-Setup-1.0.0.exe      （约 109 MB）
+release\installer\MathFlow-Setup-1.0.1.exe      （约 109 MB）
 ```
 
 双击 → 一路「下一步」→ 桌面和开始菜单出现 MathFlow 图标，双击即用。
@@ -51,7 +51,7 @@ release\installer\MathFlow-Setup-1.0.0.exe      （约 109 MB）
 ### 方式二：便携版（Windows，免安装）
 
 ```
-release\portable\MathFlow-Portable-1.0.0.exe      （约 109 MB）
+release\portable\MathFlow-Portable-1.0.1.exe      （约 109 MB）
 ```
 
 单文件，双击即用，不写注册表、不进「应用」列表，适合放 U 盘或没有安装权限的电脑。
@@ -65,13 +65,13 @@ release\portable\MathFlow-Portable-1.0.0.exe      （约 109 MB）
 
 ```
 发给别人/
-├── MathFlow-Setup-1.0.0.exe     安装版
-├── MathFlow-Portable-1.0.0.exe     便携版
+├── MathFlow-Setup-1.0.1.exe     安装版
+├── MathFlow-Portable-1.0.1.exe     便携版
 ├── 使用说明.txt                  给非技术用户的一页说明（含 SmartScreen 处理办法）
 └── SHA256.txt                    校验值，对方可自行核对
 ```
 
-对方只需要做一件事：双击 `MathFlow-Setup-1.0.0.exe`，下一步、下一步、完成。
+对方只需要做一件事：双击 `MathFlow-Setup-1.0.1.exe`，下一步、下一步、完成。
 
 重新生成这套产物（会依次做前端构建 → 图标 → 打包 → 归档）：
 
@@ -122,7 +122,7 @@ MathFlow.exe --help                                     :: 全部参数
 
 ### 方式五：下载发行包（不需要装依赖，仅需 Node 运行时）
 
-1. 解压 `mathflow-1.0.0.zip`（要求已安装 Node ≥ 18）
+1. 解压 `mathflow-<版本>.zip`（`npm run pack` 的产物，版本号随 `package.json`；要求已安装 Node ≥ 18）
 2. 双击 `start-windows.cmd`（macOS / Linux 用 `start-mac-linux.command`）
 3. 首次运行会自动在包内生成 `workspace/` 目录并写入示例文档，接着弹出浏览器
 
@@ -507,7 +507,7 @@ npm run exe       # → release/MathFlow.exe（约 89 MB，内含 Node 运行时
 **发行包**：
 
 ```bash
-npm run pack      # → release/mathflow-1.0.0.zip（约 2 MB）
+npm run pack      # → release/mathflow-<版本>.zip（约 2 MB）
 ```
 
 包内包含已构建的 `dist/`、`server/`、`bin/`、`templates/` 和双击启动脚本，
