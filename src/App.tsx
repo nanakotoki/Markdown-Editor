@@ -157,7 +157,9 @@ export default function App() {
       key={doc.id}
       docId={doc.id}
       initialContent={doc.content}
-      plain={viewMode === 'source'}
+      /* 纯源码用 plain；左右分屏的左栏也必须是「真源码」——
+         不隐藏标记、不渲染公式/表格，否则左栏等于第二份预览，和右栏重复 */
+      plain={viewMode === 'source' || viewMode === 'split'}
       onChange={(v) => updateContent(doc.id, v)}
       getRefs={() => allRefs}
       getBib={() => bibForRender}
