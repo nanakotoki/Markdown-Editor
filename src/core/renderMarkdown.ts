@@ -198,15 +198,30 @@ export function renderMarkdown(md: string, opts: RenderOptions = {}): RenderResu
   collect(tree, ctx)
 
   // 第二遍：渲染
-  const body = (tree.children as any[]).map((n) => renderBlock(n, ctx)).join('\n')
+  const body = (tree.children as any[])
+    .map((n) => withLineAttr(renderBlock(n, ctx), n.position?.start?.line))
+    .join('\n')
   const bibHtml = renderBibliography(ctx)
   return { html: body + bibHtml, toc: ctx.toc, refs: ctx.refs, bibUsed: ctx.citations }
+}
+
+/**
+ * 给顶层块的第一个标签打上源码行号（`data-mf-line`）。
+ * 预览据此实现「点哪儿跳到哪儿」与分屏滚动联动——
+ * mdast 的 position 是行号，DOM 这边用它跟编辑器对齐。
+ */
+function withLineAttr(html: string, line?: number): string {
+  if (!line) return html
+  const m = /^(\s*)<([a-zA-Z][\w-]*)((?:[^>"']|"[^"]*"|'[^']*')*?)(\/?)>/.exec(html)
+  if (!m) return html
+  const [whole, lead, tag, attrs, selfClose] = m
+  if (/\sdata-mf-line=/.test(attrs)) return html
+  return `${lead}<${tag}${attrs} data-mf-line="${line}"${selfClose}>${html.slice(whole.length)}`
 }
 
 /* ------------------------------------------------------------------ *
  *  收集编号
  * ------------------------------------------------------------------ */
-
 function directiveTitle(node: any): { title: string; children: any[] } {
   const children = [...(node.children ?? [])]
   let title = ''

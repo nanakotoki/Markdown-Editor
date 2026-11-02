@@ -3,9 +3,15 @@
 @tailwind utilities;
 
 :root {
-  --mf-serif: 'Latin Modern Roman', 'Songti SC', 'STSong', 'Noto Serif CJK SC', 'SimSun', Georgia, serif;
+  --mf-serif: 'Latin Modern Roman', 'Source Han Serif SC', 'Noto Serif CJK SC', 'Songti SC', 'STSong', 'SimSun', Georgia, serif;
   --mf-sans: 'Inter', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
   --mf-mono: 'JetBrains Mono', 'Cascadia Code', 'Consolas', monospace;
+  /* 外观设置会在运行时改写下面这几个变量（见 core/appearance.ts） */
+  --mf-academic-size: 16.5px;
+  --mf-academic-leading: 1.9;
+  --mf-academic-weight: 400;
+  --mf-editor-font: 'Latin Modern Roman', 'Songti SC', 'STSong', 'SimSun', Georgia, serif;
+  --mf-editor-size: 15px;
   --mf-ink: #1f2733;
   --mf-ink-soft: #5d6779;
   --mf-rule: #1f2733;
@@ -206,9 +212,24 @@ body {
 .mf-academic {
   font-family: var(--mf-serif);
   color: var(--mf-ink);
-  font-size: 16.5px;
-  line-height: 1.9;
+  font-size: var(--mf-academic-size, 16.5px);
+  line-height: var(--mf-academic-leading, 1.9);
+  font-weight: var(--mf-academic-weight, 400);
   letter-spacing: 0.005em;
+}
+
+/* 分屏：预览块可点，点了左边跳到对应源码 */
+.mf-preview-scroll[data-jumpable='true'] [data-mf-line] {
+  cursor: pointer;
+  border-radius: 3px;
+  transition: background 0.12s ease;
+}
+.mf-preview-scroll[data-jumpable='true'] [data-mf-line]:hover {
+  background: rgba(42, 85, 212, 0.045);
+}
+.mf-preview-scroll[data-jumpable='true'] [data-mf-line].mf-line-hot {
+  background: rgba(42, 85, 212, 0.1);
+  box-shadow: inset 2px 0 0 var(--mf-accent);
 }
 
 .mf-academic .mf-heading {

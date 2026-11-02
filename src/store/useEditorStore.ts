@@ -40,6 +40,7 @@ export type ModalName =
   | 'bib'
   | 'cheatsheet'
   | 'manual'
+  | 'appearance'
   | 'search'
   | null
 
@@ -91,6 +92,56 @@ export interface Settings {
   citationStyle: 'numeric' | 'author-year'
   texTemplate: 'ctexart' | 'ctexbook' | 'article' | 'IEEEtran'
   showLineNumbers: boolean
+  /* ---- 外观：正文（渲染结果）---- */
+  previewFont: 'serif' | 'song' | 'kai' | 'sans'
+  previewFontSize: number
+  previewLineHeight: number
+  previewWeight: 400 | 500 | 600
+  /* ---- 外观：源码（编辑区）---- */
+  editorFont: 'serif' | 'mono' | 'sans' | 'kai'
+  editorFontSize: number
+  /* ---- 分屏：滚动联动开关 ---- */
+  syncScroll: boolean
+}
+
+export const DEFAULT_SETTINGS: Settings = {
+  autoNumberEquations: true,
+  citationStyle: 'numeric',
+  texTemplate: 'ctexart',
+  showLineNumbers: true,
+  previewFont: 'serif',
+  previewFontSize: 16.5,
+  previewLineHeight: 1.9,
+  previewWeight: 400,
+  editorFont: 'serif',
+  editorFontSize: 15,
+  syncScroll: true,
+}
+
+const SETTINGS_KEY = 'mf-settings-v1'
+
+/** 读回上次的外观设置；坏数据一律丢弃，永远回落到默认值 */
+export function loadSettings(): Settings {
+  try {
+    const raw = localStorage.getItem(SETTINGS_KEY)
+    if (!raw) return { ...DEFAULT_SETTINGS }
+    const parsed = JSON.parse(raw) as Partial<Settings>
+    const out: Settings = { ...DEFAULT_SETTINGS, ...parsed }
+    // 防御：越界或类型不对的值逐个纠正，避免把界面弄坏
+    if (![400, 500, 600].includes(out.previewWeight)) out.previewWeight = 400
+    out.previewFontSize = clampNum(out.previewFontSize, 13, 24, 16.5)
+    out.previewLineHeight = clampNum(out.previewLineHeight, 1.4, 2.6, 1.9)
+    out.editorFontSize = clampNum(out.editorFontSize, 11, 20, 15)
+    return out
+  } catch {
+    return { ...DEFAULT_SETTINGS }
+  }
+}
+
+function clampNum(v: unknown, min: number, max: number, fallback: number): number {
+  const n = typeof v === 'number' ? v : Number(v)
+  if (!Number.isFinite(n)) return fallback
+  return Math.min(max, Math.max(min, n))
 }
 
 const now = Date.now()
@@ -248,6 +299,8 @@ interface EditorState {
   addLibraryFormula: (f: FormulaEntry) => void
   setAIConfig: (c: Partial<AIConfig>) => void
   updateSettings: (s: Partial<Settings>) => void
+  /** 只把外观相关的几项恢复默认，不动公式编号/引用样式 */
+  resetAppearance: () => void
   setLiveContent: (c: string) => void
   showToast: (text: string, kind?: 'info' | 'success' | 'warn') => void
   activeDoc: () => DocNode
@@ -283,12 +336,7 @@ export const useEditorStore = create<EditorState>()(
         model: 'deepseek-chat',
         visionModel: 'gpt-4o-mini',
       },
-      settings: {
-        autoNumberEquations: true,
-        citationStyle: 'numeric',
-        texTemplate: 'ctexart',
-        showLineNumbers: true,
-      },
+      settings: loadSettings(),
       liveContent: seedDocs[0].content,
       toast: null,
 
@@ -677,7 +725,35 @@ export const useEditorStore = create<EditorState>()(
       removeFavorite: (id) => set((s) => ({ favorites: s.favorites.filter((f) => f.id !== id) })),
       addLibraryFormula: (f) => get().addFavorite({ name: f.name, latex: f.latex, tags: [f.category] }),
       setAIConfig: (c) => set((s) => ({ aiConfig: { ...s.aiConfig, ...c } })),
-      updateSettings: (s2) => set((s) => ({ settings: { ...s.settings, ...s2 } })),
+      updateSettings: (s2) => {
+        set((s) => {
+          const next = { ...s.settings, ...s2 }
+          try {
+            localStorage.setItem(SETTINGS_KEY, JSON.stringify(next))
+          } catch {
+            /* 隐身模式 / 配额满：设置仍然在当前会话生效 */
+          }
+          return { settings: next }
+        })
+      },
+      resetAppearance: () =>
+        set((s) => {
+          const next: Settings = {
+            ...s.settings,
+            previewFont: DEFAULT_SETTINGS.previewFont,
+            previewFontSize: DEFAULT_SETTINGS.previewFontSize,
+            previewLineHeight: DEFAULT_SETTINGS.previewLineHeight,
+            previewWeight: DEFAULT_SETTINGS.previewWeight,
+            editorFont: DEFAULT_SETTINGS.editorFont,
+            editorFontSize: DEFAULT_SETTINGS.editorFontSize,
+          }
+          try {
+            localStorage.setItem(SETTINGS_KEY, JSON.stringify(next))
+          } catch {
+            /* 同上 */
+          }
+          return { settings: next }
+        }),
       setLiveContent: (c) => set({ liveContent: c }),
       showToast: (text, kind = 'info') => {
         const id = Date.now()
@@ -705,7 +781,6 @@ export const useEditorStore = create<EditorState>()(
               bibEntries: s.bibEntries,
               favorites: s.favorites,
               aiConfig: s.aiConfig,
-              settings: s.settings,
             }
           : {
               docs: s.docs,
@@ -719,8 +794,17 @@ export const useEditorStore = create<EditorState>()(
               bibEntries: s.bibEntries,
               favorites: s.favorites,
               aiConfig: s.aiConfig,
-              settings: s.settings,
             },
+      /**
+       * 外观设置单独存在 mf-settings-v1（见 loadSettings），
+       * 这里一律以它为准——否则老版本留下的快照会用旧形状的 settings
+       * 把新字段（字体、同步滚动…）整个盖掉。
+       */
+      merge: (persisted, current) => ({
+        ...current,
+        ...((persisted ?? {}) as Partial<typeof current>),
+        settings: loadSettings(),
+      }),
     }
   )
 )

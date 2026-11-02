@@ -4,6 +4,7 @@ import {
   BookmarkPlus,
   Check,
   ChevronDown,
+  ChevronUp,
   Copy,
   FileText,
   FunctionSquare,
@@ -32,8 +33,9 @@ export interface HudProps {
   latex: string
   display: boolean
   macros: MacroMap
-  style: React.CSSProperties
-  placement: 'above' | 'below'
+  /** 折叠后只留一条头部，把编辑区高度还给正文 */
+  collapsed: boolean
+  onToggleCollapse: () => void
   onChangeLatex: (latex: string) => void
   onRequestBuilder: (kind: 'matrix' | 'ai' | 'plot') => void
   onFavorite: () => void
@@ -88,8 +90,8 @@ export default function FloatingMathHUD({
   latex,
   display,
   macros,
-  style,
-  placement,
+  collapsed,
+  onToggleCollapse,
   onChangeLatex,
   onRequestBuilder,
   onFavorite,
@@ -136,28 +138,27 @@ export default function FloatingMathHUD({
   }
 
   return (
-    <div
-      className={`mf-hud absolute z-40 w-[430px] rounded-xl border border-ink-200 bg-white/95 shadow-hud backdrop-blur animate-fade-up ${
-        placement === 'above' ? '-translate-y-full' : ''
-      }`}
-      style={style}
-      onMouseDown={(e) => e.preventDefault()}
-    >
-      {/* 头部 */}
-      <div className="flex items-center justify-between gap-2 border-b border-ink-100 px-3 py-1.5">
-        <div className="flex items-center gap-1.5 text-[11px] font-medium text-ink-400">
-          <FunctionSquare size={12} className="text-accent-500" />
-          {display ? '块级公式' : '行内公式'}
+    <div className="mf-hud mf-hud-dock relative z-20 shrink-0 border-t border-ink-200 bg-white/97 shadow-[0_-8px_24px_-18px_rgba(20,26,35,.35)] backdrop-blur">
+      {/* 头部：常驻一行，折叠时也只有这一行 */}
+      <div className="flex items-center justify-between gap-2 px-3 py-1">
+        <div className="flex min-w-0 items-center gap-1.5 text-[11px] font-medium text-ink-400">
+          <FunctionSquare size={12} className="shrink-0 text-accent-500" />
+          <span className="shrink-0">{display ? '块级公式' : '行内公式'}</span>
           <span className="text-ink-300">·</span>
-          <span className="font-mono text-[10px]">{latex.length} 字符</span>
+          <span className="shrink-0 font-mono text-[10px]">{latex.length} 字符</span>
           {env && (
             <>
               <span className="text-ink-300">·</span>
               <span className="rounded bg-accent-50 px-1 text-[10px] text-accent-600">{env}</span>
             </>
           )}
+          {collapsed && result.diagnosis && (
+            <span className="ml-1 truncate rounded bg-rose-50 px-1.5 py-0.5 text-[10px] text-rose-600">
+              {result.diagnosis.title}
+            </span>
+          )}
         </div>
-        <div className="flex items-center gap-0.5">
+        <div className="flex shrink-0 items-center gap-0.5">
           <HudIcon title="自然语言转公式" onClick={() => onRequestBuilder('ai')}>
             <Sparkles size={13} />
           </HudIcon>
@@ -170,80 +171,91 @@ export default function FloatingMathHUD({
           <HudIcon title="收藏到公式库" onClick={onFavorite}>
             <BookmarkPlus size={13} />
           </HudIcon>
+          <span className="mx-0.5 h-4 w-px bg-ink-100" />
+          <button
+            title={collapsed ? '展开公式工作台（Ctrl+Shift+M）' : '折叠，把空间还给正文（Ctrl+Shift+M）'}
+            onClick={onToggleCollapse}
+            className="rounded p-1 text-ink-400 transition hover:bg-ink-100 hover:text-accent-600"
+          >
+            {collapsed ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+          </button>
         </div>
       </div>
 
-      {/* 实时预览 */}
-      <div className="mf-hud-preview max-h-[130px] overflow-auto px-4 py-3">
-        <div className={display ? 'text-center' : ''} dangerouslySetInnerHTML={{ __html: result.html }} />
-        {result.healed.applied.length > 0 && (
-          <div className="mt-2 flex flex-wrap items-center gap-1 text-[11px] text-amber-600">
-            <Wand2 size={11} />
-            <span>已自动愈合：</span>
-            {result.healed.applied.map((a) => (
-              <span key={a} className="rounded bg-amber-50 px-1.5 py-0.5">
-                {a}
-              </span>
-            ))}
+      {!collapsed && (
+        <>
+          {/* 实时预览：横向可滚，竖向限高，绝不盖住编辑区 */}
+          <div className="mf-hud-preview max-h-[104px] overflow-auto border-t border-ink-100 px-4 py-2">
+            <div className={display ? 'text-center' : ''} dangerouslySetInnerHTML={{ __html: result.html }} />
+            {result.healed.applied.length > 0 && (
+              <div className="mt-1.5 flex flex-wrap items-center gap-1 text-[11px] text-amber-600">
+                <Wand2 size={11} />
+                <span>已自动愈合：</span>
+                {result.healed.applied.map((a) => (
+                  <span key={a} className="rounded bg-amber-50 px-1.5 py-0.5">
+                    {a}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
-        )}
-      </div>
 
-      {/* 中文诊断 */}
-      {result.diagnosis && (
-        <div className="mx-3 mb-2 rounded-lg border border-rose-100 bg-rose-50/70 px-2.5 py-2">
-          <div className="flex items-start gap-1.5 text-[12px] font-medium text-rose-700">
-            <AlertTriangle size={13} className="mt-0.5 shrink-0" />
-            <span>{result.diagnosis.title}</span>
-          </div>
-          <div className="mt-1 pl-[19px] text-[11px] leading-relaxed text-rose-500">{result.diagnosis.detail}</div>
-          {result.diagnosis.fixed && result.diagnosis.fixed !== latex && (
-            <button
-              className="ml-[19px] mt-1.5 inline-flex items-center gap-1 rounded-md bg-rose-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-rose-700"
-              onClick={() => {
-                onChangeLatex(result.diagnosis!.fixed!)
-                showToast('已应用修复', 'success')
-              }}
-            >
-              <Check size={11} />
-              {result.diagnosis.fixLabel ?? '一键修复'}
-            </button>
+          {/* 中文诊断 */}
+          {result.diagnosis && (
+            <div className="mx-3 mb-1.5 rounded-lg border border-rose-100 bg-rose-50/70 px-2.5 py-1.5">
+              <div className="flex items-start gap-1.5 text-[12px] font-medium text-rose-700">
+                <AlertTriangle size={13} className="mt-0.5 shrink-0" />
+                <span>{result.diagnosis.title}</span>
+              </div>
+              <div className="mt-0.5 pl-[19px] text-[11px] leading-relaxed text-rose-500">{result.diagnosis.detail}</div>
+              {result.diagnosis.fixed && result.diagnosis.fixed !== latex && (
+                <button
+                  className="ml-[19px] mt-1 inline-flex items-center gap-1 rounded-md bg-rose-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-rose-700"
+                  onClick={() => {
+                    onChangeLatex(result.diagnosis!.fixed!)
+                    showToast('已应用修复', 'success')
+                  }}
+                >
+                  <Check size={11} />
+                  {result.diagnosis.fixLabel ?? '一键修复'}
+                </button>
+              )}
+            </div>
           )}
-        </div>
-      )}
 
-      {/* 矩阵参数调节 */}
-      {isMatrix && (
-        <div className="mx-3 mb-2 flex items-center gap-1.5 rounded-lg bg-ink-50 px-2 py-1.5">
-          <span className="text-[11px] text-ink-400">矩阵</span>
-          <SmallBtn onClick={() => onChangeLatex(addMatrixRow(latex))}>
-            <Rows3 size={11} /> +行
-          </SmallBtn>
-          <SmallBtn onClick={() => onChangeLatex(addMatrixCol(latex))}>
-            <Plus size={11} /> +列
-          </SmallBtn>
-          <SmallBtn onClick={() => onChangeLatex(transposeMatrixLatex(latex))}>
-            <ChevronDown size={11} className="rotate-90" /> 转置
-          </SmallBtn>
-        </div>
+          {/* 矩阵参数调节 + 快捷动作，挤在一行里省高度 */}
+          <div className="flex flex-wrap items-center gap-1 border-t border-ink-100 px-3 py-1.5">
+            {isMatrix && (
+              <>
+                <span className="mr-0.5 text-[11px] text-ink-400">矩阵</span>
+                <SmallBtn onClick={() => onChangeLatex(addMatrixRow(latex))}>
+                  <Rows3 size={11} /> +行
+                </SmallBtn>
+                <SmallBtn onClick={() => onChangeLatex(addMatrixCol(latex))}>
+                  <Plus size={11} /> +列
+                </SmallBtn>
+                <SmallBtn onClick={() => onChangeLatex(transposeMatrixLatex(latex))}>
+                  <ChevronDown size={11} className="rotate-90" /> 转置
+                </SmallBtn>
+                <span className="mx-1 h-4 w-px bg-ink-100" />
+              </>
+            )}
+            <span className="mr-1 text-[11px] text-ink-300">复制为</span>
+            <ActionBtn active={copied === 'mathml'} onClick={() => doCopy('mathml')} icon={<FileText size={11} />}>
+              Word
+            </ActionBtn>
+            <ActionBtn active={copied === 'png'} onClick={() => doCopy('png')} icon={<ImageIcon size={11} />}>
+              PNG
+            </ActionBtn>
+            <ActionBtn active={copied === 'svg'} onClick={() => doCopy('svg')} icon={<Copy size={11} />}>
+              SVG
+            </ActionBtn>
+            <ActionBtn active={copied === 'latex'} onClick={() => doCopy('latex')} icon={<Copy size={11} />}>
+              LaTeX
+            </ActionBtn>
+          </div>
+        </>
       )}
-
-      {/* 快捷动作 */}
-      <div className="flex items-center gap-1 border-t border-ink-100 px-3 py-2">
-        <span className="mr-1 text-[11px] text-ink-300">复制为</span>
-        <ActionBtn active={copied === 'mathml'} onClick={() => doCopy('mathml')} icon={<FileText size={11} />}>
-          Word
-        </ActionBtn>
-        <ActionBtn active={copied === 'png'} onClick={() => doCopy('png')} icon={<ImageIcon size={11} />}>
-          PNG
-        </ActionBtn>
-        <ActionBtn active={copied === 'svg'} onClick={() => doCopy('svg')} icon={<Copy size={11} />}>
-          SVG
-        </ActionBtn>
-        <ActionBtn active={copied === 'latex'} onClick={() => doCopy('latex')} icon={<Copy size={11} />}>
-          LaTeX
-        </ActionBtn>
-      </div>
     </div>
   )
 }

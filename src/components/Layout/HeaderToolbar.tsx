@@ -15,6 +15,7 @@ import {
   Keyboard,
   Library,
   LineChart,
+  Link2,
   ListTree,
   PanelLeft,
   PenTool,
@@ -26,6 +27,7 @@ import {
   SquareFunction,
   Table2,
   TextCursorInput,
+  Type,
 } from 'lucide-react'
 import { Button, IconButton, Segmented } from '../ui'
 import { useEditorStore, type ViewMode } from '../../store/useEditorStore'
@@ -168,6 +170,25 @@ export default function HeaderToolbar({
         ]}
       />
 
+      {viewMode === 'split' && (
+        <button
+          onClick={() => updateSettings({ syncScroll: !settings.syncScroll })}
+          title={
+            settings.syncScroll
+              ? '同步滚动：已开启，两边一起滚（点击关闭）'
+              : '同步滚动：已关闭，两边各自滚动（点击开启）'
+          }
+          className={`inline-flex h-8 items-center gap-1 rounded-lg px-2 text-[12px] transition ${
+            settings.syncScroll
+              ? 'bg-accent-50 text-accent-700 ring-1 ring-accent-200'
+              : 'text-ink-500 ring-1 ring-ink-200 hover:bg-ink-50'
+          }`}
+        >
+          <Link2 size={13} />
+          同步
+        </button>
+      )}
+
       <Menu
         label="插入"
         icon={<Plus size={14} />}
@@ -194,6 +215,7 @@ export default function HeaderToolbar({
           { label: '函数绘图 / 矩阵计算', icon: <LineChart size={13} />, onClick: () => onRequestBuilder('plot') },
           { label: '快捷输入速查', icon: <Keyboard size={13} />, onClick: onShowCheatsheet },
           { label: '语法与使用手册（F1）', icon: <BookOpen size={13} />, onClick: () => openModal('manual') },
+          { label: '字体与外观', icon: <Type size={13} />, onClick: () => openModal('appearance') },
           { label: 'AI 公式助手', icon: <Sparkles size={13} />, onClick: () => onRequestBuilder('ai') },
         ]}
       />
@@ -203,6 +225,11 @@ export default function HeaderToolbar({
         icon={<Settings2 size={15} />}
         align="right"
         items={[
+          {
+            label: '字体与外观…',
+            icon: <Type size={13} />,
+            onClick: () => openModal('appearance'),
+          },
           {
             label: `${settings.autoNumberEquations ? '✓ ' : ''}公式自动编号`,
             icon: <FunctionSquare size={13} />,

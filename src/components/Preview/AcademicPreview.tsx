@@ -21,6 +21,12 @@ export interface AcademicPreviewProps {
   extRefs?: RefEntry[]
   onRender?: (res: RenderResult) => void
   className?: string
+  /** 分屏模式：点击某个块，让左边跳到对应源码行 */
+  onJumpToSource?: (line: number) => void
+  /** 是否启用「点渲染结果跳源码」（仅分屏时开） */
+  jumpable?: boolean
+  /** 把内部滚动容器交给外层，用于滚动联动 */
+  scrollElementRef?: React.MutableRefObject<HTMLDivElement | null>
 }
 
 interface HoverCard {
@@ -41,9 +47,24 @@ export default function AcademicPreview({
   extRefs,
   onRender,
   className,
+  onJumpToSource,
+  jumpable = false,
+  scrollElementRef,
 }: AcademicPreviewProps) {
-  const scrollRef = useRef<HTMLDivElement>(null)
+  const scrollRef = useRef<HTMLDivElement | null>(null)
   const [hover, setHover] = useState<HoverCard | null>(null)
+
+  /** 把内部滚动容器同时交给外层（滚动联动要用） */
+  const attachScroll = (el: HTMLDivElement | null) => {
+    scrollRef.current = el
+    if (scrollElementRef) scrollElementRef.current = el
+  }
+
+  /** 事件在 effect 里绑定，用 ref 取最新的回调，避免每次重渲染都重绑 */
+  const jumpRef = useRef(onJumpToSource)
+  jumpRef.current = onJumpToSource
+  const jumpableRef = useRef(jumpable)
+  jumpableRef.current = jumpable
 
   const result = useMemo(
     () =>
@@ -143,7 +164,16 @@ export default function AcademicPreview({
     }
     const onClick = (e: MouseEvent) => {
       const anchor = (e.target as HTMLElement).closest('a') as HTMLAnchorElement | null
-      if (!anchor) return
+
+      // 0) 没点在链接上：分屏模式下「点哪儿跳哪儿」
+      if (!anchor) {
+        if (!jumpableRef.current) return
+        const block = (e.target as HTMLElement).closest('[data-mf-line]') as HTMLElement | null
+        const line = Number(block?.dataset.mfLine)
+        if (!block || !Number.isFinite(line)) return
+        jumpRef.current?.(line)
+        return
+      }
 
       // 1) 交叉引用 / 文献引用
       if (anchor.classList.contains('mf-ref') || anchor.classList.contains('mf-cite')) {
@@ -178,7 +208,11 @@ export default function AcademicPreview({
   }, [])
 
   return (
-    <div ref={scrollRef} className={`mf-preview-scroll relative h-full overflow-auto ${className ?? ''}`}>
+    <div
+      ref={attachScroll}
+      data-jumpable={jumpable ? 'true' : 'false'}
+      className={`mf-preview-scroll relative h-full overflow-auto ${className ?? ''}`}
+    >
       <div className="mf-academic mx-auto max-w-[860px] px-10 pb-32 pt-8" dangerouslySetInnerHTML={{ __html: result.html }} />
       {hover && (
         <div

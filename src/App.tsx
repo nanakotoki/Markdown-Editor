@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { CheckCircle2, FileText, FolderOpen, Info, Loader2 } from 'lucide-react'
 import HeaderToolbar from './components/Layout/HeaderToolbar'
 import SidebarDocTree from './components/Layout/SidebarDocTree'
@@ -14,11 +14,15 @@ import SymbolPalette from './components/Builders/SymbolPalette'
 import MacroDrawer from './components/Builders/MacroDrawer'
 import AIAssistantModal from './components/Builders/AIAssistantModal'
 import ManualModal from './components/Layout/ManualModal'
+import AppearanceModal from './components/Layout/AppearanceModal'
 import { Button, Modal } from './components/ui'
 import { mergeWorkspaceBib, useEditorStore, workspaceRefEntries } from './store/useEditorStore'
 import { macrosToKatex } from './core/katexSafeRender'
 import { renderMarkdown, type RenderResult } from './core/renderMarkdown'
 import { SNIPPET_CHEATSHEET } from './core/snippetRules'
+import { applyAppearance } from './core/appearance'
+import { collectAnchors, flashLine, lineToY, yToLine, type Anchor } from './core/scrollSync'
+import { editorBridge } from './store/editorBridge'
 
 export default function App() {
   const {
@@ -113,13 +117,138 @@ export default function App() {
   const extRefs = useMemo(() => workspaceRefEntries(indexLabels, doc?.filePath), [indexLabels, doc?.filePath])
 
   const [seed, setSeed] = useState<{ kind: 'matrix' | 'ai' | 'plot'; latex: string }>({ kind: 'matrix', latex: '' })
-
   const requestBuilder = (kind: 'matrix' | 'ai' | 'plot', latex = '') => {
     setSeed({ kind, latex })
     openModal(kind)
   }
 
   const previewRef = useRef<HTMLDivElement>(null)
+
+  /* ================================================================== *
+   *  外观：字体 / 字号 / 行距 —— 写进 CSS 变量，改完立刻生效
+   * ================================================================== */
+  useEffect(() => {
+    applyAppearance(settings)
+  }, [settings])
+
+  /* ================================================================== *
+   *  分屏：源码 <-> 渲染结果，双向跳转 + 滚动联动
+   *  - 预览侧每个顶层块带 data-mf-line，编辑侧用 lineBlockAt 拿到同一行的位置
+   *  - 两边锚点各自成序列，中间的行线性插值
+   * ================================================================== */
+  const previewScrollRef = useRef<HTMLDivElement | null>(null)
+  const anchorsRef = useRef<{ preview: Anchor[]; editor: Anchor[] }>({ preview: [], editor: [] })
+  /** 谁刚刚被程序滚动过、多久之内忽略它自己的滚动事件（防止两边互相推） */
+  const syncLock = useRef<{ side: '' | 'editor' | 'preview'; until: number }>({ side: '', until: 0 })
+
+  const rebuildAnchors = useCallback(() => {
+    const p = previewScrollRef.current
+    if (!p) return
+    const preview = collectAnchors(p)
+    const api = editorBridge.current
+    const editor: Anchor[] = []
+    if (api) {
+      for (const a of preview) {
+        const y = api.topOfLine(a.line)
+        if (y != null && Number.isFinite(y)) editor.push({ line: a.line, y })
+      }
+      editor.sort((x, y) => x.y - y.y)
+    }
+    anchorsRef.current = { preview, editor }
+  }, [])
+
+  /** 预览重排（内容或字号变化）之后重算锚点——等 DOM 落定再量 */
+  useEffect(() => {
+    if (viewMode !== 'split') return
+    const t = window.setTimeout(rebuildAnchors, 90)
+    return () => window.clearTimeout(t)
+  }, [deferred, viewMode, activeDocId, settings.previewFontSize, settings.previewLineHeight, settings.previewFont, rebuildAnchors])
+
+  /** 换文件时分屏两侧都回到开头——否则左栏在顶部、右栏还停在上一个文件的位置 */
+  useEffect(() => {
+    if (viewMode !== 'split') return
+    const p = previewScrollRef.current
+    if (!p) return
+    // 这次滚动是我们自己做的，别让它反过来把编辑器也拽走
+    syncLock.current = { side: 'preview', until: performance.now() + 300 }
+    p.scrollTop = 0
+  }, [activeDocId, viewMode])
+
+  const jumpToSource = useCallback((line: number) => {
+    const api = editorBridge.current
+    if (!api) return
+    syncLock.current = { side: 'editor', until: performance.now() + 200 }
+    api.revealLine(line, true)
+  }, [])
+
+  /* 滚动联动（可在工具栏关闭） */
+  useEffect(() => {
+    if (viewMode !== 'split') return
+    const p = previewScrollRef.current
+    const api = editorBridge.current
+    const el = api?.scrollEl() ?? null
+    if (!p || !api || !el) return
+
+    const blocked = (side: 'editor' | 'preview') =>
+      syncLock.current.side === side && performance.now() < syncLock.current.until
+    const lock = (side: '' | 'editor' | 'preview') => {
+      syncLock.current = { side, until: performance.now() + 140 }
+    }
+
+    const onEditorScroll = () => {
+      if (!useEditorStore.getState().settings.syncScroll) return
+      if (blocked('editor')) return
+      const line = api.lineAtViewportTop()
+      if (line == null) return
+      const y = lineToY(anchorsRef.current.preview, line)
+      if (y == null) return
+      lock('preview')
+      p.scrollTop = y
+    }
+    const onPreviewScroll = () => {
+      if (!useEditorStore.getState().settings.syncScroll) return
+      if (blocked('preview')) return
+      const line = yToLine(anchorsRef.current.preview, p.scrollTop)
+      if (line == null) return
+      const y = lineToY(anchorsRef.current.editor, line)
+      if (y == null) return
+      lock('editor')
+      api.scrollToY(y)
+    }
+
+    el.addEventListener('scroll', onEditorScroll, { passive: true })
+    p.addEventListener('scroll', onPreviewScroll, { passive: true })
+    return () => {
+      el.removeEventListener('scroll', onEditorScroll)
+      p.removeEventListener('scroll', onPreviewScroll)
+    }
+  }, [viewMode, settings.syncScroll, activeDocId, booted])
+
+  /* 在源码里点一下，右边跟着滚到同一段（不改变光标，只是定位） */
+  useEffect(() => {
+    if (viewMode !== 'split') return
+    const api = editorBridge.current
+    const el = api?.scrollEl() ?? null
+    const p = previewScrollRef.current
+    if (!api || !el || !p) return
+
+    const onMouseUp = () => {
+      const line = api.lineAtCaret()
+      if (line == null) return
+      const y = lineToY(anchorsRef.current.preview, line)
+      if (y == null) return
+      syncLock.current = { side: 'preview', until: performance.now() + 220 }
+      p.scrollTo({ top: Math.max(0, y - 10), behavior: 'smooth' })
+      flashLine(p, line)
+    }
+    // 用 click 而不是 mouseup：拖选文本时不该把预览拽走
+    const onClick = (e: MouseEvent) => {
+      if (e.detail === 0) return
+      onMouseUp()
+    }
+    el.addEventListener('click', onClick)
+    return () => el.removeEventListener('click', onClick)
+  }, [viewMode, activeDocId, booted])
 
   const jumpInPreview = (anchor: string) => {
     const el = previewRef.current?.querySelector(`#${CSS.escape(anchor)}`) as HTMLElement | null
@@ -190,6 +319,9 @@ export default function App() {
       settings={settings}
       extRefs={extRefs}
       onRender={() => undefined}
+      onJumpToSource={jumpToSource}
+      jumpable={viewMode === 'split'}
+      scrollElementRef={previewScrollRef}
     />
   )
 
@@ -323,6 +455,7 @@ function Modals({
       <AIAssistantModal open={modal === 'ai'} onClose={() => openModal(null)} seed={seed.kind === 'ai' ? seed.latex : ''} />
       <ExportModal open={modal === 'export'} onClose={() => openModal(null)} />
       <ManualModal open={modal === 'manual'} onClose={() => openModal(null)} />
+      <AppearanceModal open={modal === 'appearance'} onClose={() => openModal(null)} />
 
       <Modal
         open={modal === 'cheatsheet'}

@@ -27,8 +27,19 @@ function esc(s: string) {
 }
 
 export async function buildStandaloneHtml(markdown: string, opts: HtmlExportOptions = {}): Promise<{ html: string; result: RenderResult }> {
-  const settings: Settings =
-    opts.settings ?? { autoNumberEquations: true, citationStyle: 'numeric', texTemplate: 'ctexart', showLineNumbers: true }
+  const settings: Settings = opts.settings ?? {
+    autoNumberEquations: true,
+    citationStyle: 'numeric',
+    texTemplate: 'ctexart',
+    showLineNumbers: true,
+    previewFont: 'serif',
+    previewFontSize: 16.5,
+    previewLineHeight: 1.9,
+    previewWeight: 400,
+    editorFont: 'serif',
+    editorFontSize: 15,
+    syncScroll: true,
+  }
   const result = renderMarkdown(markdown, {
     macros: opts.macros ?? {},
     bib: opts.bib ?? [],

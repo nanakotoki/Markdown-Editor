@@ -46,12 +46,24 @@ const mfHighlight = HighlightStyle.define([
   { tag: t.comment, color: '#8e97a8' },
 ])
 
+/** 行号夹取到文档范围（预览里点到的行号可能比当前文档还大） */
+function clampLine(view: EditorView, line: number): number {
+  return Math.min(Math.max(1, Math.round(line)), view.state.doc.lines)
+}
+
+/** .cm-content 顶端在滚动坐标系里的位置（含 scroller 的上内边距） */
+function contentOffset(view: EditorView): number {
+  const content = view.contentDOM.getBoundingClientRect()
+  const scroller = view.scrollDOM.getBoundingClientRect()
+  return content.top - scroller.top + view.scrollDOM.scrollTop
+}
+
 const mfTheme = EditorView.theme(
   {
-    '&': { height: '100%', fontSize: '15px', color: '#1f2733', background: 'transparent' },
+    '&': { height: '100%', fontSize: 'var(--mf-editor-size, 15px)', color: '#1f2733', background: 'transparent' },
     '&.cm-focused': { outline: 'none' },
     '.cm-scroller': {
-      fontFamily: 'var(--mf-serif)',
+      fontFamily: 'var(--mf-editor-font)',
       lineHeight: '1.95',
       padding: '26px 44px 140px',
       overflow: 'auto',
@@ -96,13 +108,30 @@ export default function MathFlowEditor({
     to: number
     latex: string
     display: boolean
-    top: number
-    left: number
-    placement: 'above' | 'below'
   } | null>(null)
+  /** 公式工作台折叠状态：折叠后只剩一条 32px 的头部，正文区完整还给你 */
+  const [hudCollapsed, setHudCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem('mf-hud-collapsed') === '1'
+    } catch {
+      return false
+    }
+  })
 
   const showToast = useEditorStore((s) => s.showToast)
   const addFavorite = useEditorStore((s) => s.addFavorite)
+
+  /** 折叠 / 展开公式工作台，并记住这次的选择 */
+  const toggleHudCollapsed = useCallback(() => {
+    setHudCollapsed((v) => {
+      try {
+        localStorage.setItem('mf-hud-collapsed', v ? '0' : '1')
+      } catch {
+        /* 存不下只影响这次会话 */
+      }
+      return !v
+    })
+  }, [])
 
   const flush = useCallback(() => {
     const view = viewRef.current
@@ -110,31 +139,26 @@ export default function MathFlowEditor({
     onChange(view.state.doc.toString())
   }, [onChange])
 
-  const syncHud = useCallback(
-    (view: EditorView) => {
-      const range = activeMathAt(view.state)
-      if (!range) {
-        setHud(null)
-        return
-      }
-      const coords = view.coordsAtPos(range.from)
-      const box = containerRef.current?.getBoundingClientRect()
-      if (!coords || !box) return
-      const topInBox = coords.top - box.top
-      const placement: 'above' | 'below' = topInBox > 330 ? 'above' : 'below'
-      const left = Math.max(8, Math.min(coords.left - box.left - 30, box.width - 448))
-      setHud({
+  /**
+   * 工作台只关心「光标是不是在一段公式里」，不再计算屏幕坐标——
+   * 它是停靠在编辑区底部的面板，不覆盖任何一行代码。
+   */
+  const syncHud = useCallback((view: EditorView) => {
+    const range = activeMathAt(view.state)
+    if (!range) {
+      setHud(null)
+      return
+    }
+    setHud((prev) => {
+      if (prev && prev.from === range.from && prev.to === range.to && prev.latex === range.latex) return prev
+      return {
         from: range.from,
         to: range.to,
         latex: range.latex,
         display: range.type === 'display',
-        top: placement === 'above' ? topInBox - 8 : coords.bottom - box.top + 8,
-        left,
-        placement,
-      })
-    },
-    []
-  )
+      }
+    })
+  }, [])
 
   useEffect(() => {
     if (!hostRef.current) return
@@ -156,6 +180,14 @@ export default function MathFlowEditor({
             run: (view) => {
               const r = activeMathAt(view.state)
               onRequestBuilder('ai', r?.latex ?? '')
+              return true
+            },
+          },
+          {
+            // 折叠 / 展开底部公式工作台，把高度还给正文
+            key: 'Mod-Shift-m',
+            run: () => {
+              toggleHudCollapsed()
               return true
             },
           },
@@ -212,11 +244,7 @@ export default function MathFlowEditor({
     viewRef.current = view
     syncHud(view)
 
-    const onScroll = () => syncHud(view)
-    view.scrollDOM.addEventListener('scroll', onScroll, { passive: true })
-
     return () => {
-      view.scrollDOM.removeEventListener('scroll', onScroll)
       if (timerRef.current) window.clearTimeout(timerRef.current)
       view.destroy()
       viewRef.current = null
@@ -316,6 +344,41 @@ export default function MathFlowEditor({
           v.focus()
         }
       },
+      /* ---------- 分屏联动 / 预览点击跳转 ---------- */
+      scrollEl: () => view()?.scrollDOM ?? null,
+      lineAtViewportTop: () => {
+        const v = view()
+        if (!v) return null
+        const pos = v.posAtCoords({ x: 48, y: 12 })
+        return pos == null ? null : v.state.doc.lineAt(pos).number
+      },
+      lineAtCaret: () => {
+        const v = view()
+        if (!v) return null
+        return v.state.doc.lineAt(v.state.selection.main.head).number
+      },
+      topOfLine: (line: number) => {
+        const v = view()
+        if (!v) return null
+        const l = v.state.doc.line(clampLine(v, line))
+        return contentOffset(v) + v.lineBlockAt(l.from).top
+      },
+      scrollToY: (y: number) => {
+        const v = view()
+        if (!v) return
+        v.scrollDOM.scrollTop = Math.max(0, y)
+      },
+      revealLine: (line: number, putCaret = false) => {
+        const v = view()
+        if (!v) return
+        const l = v.state.doc.line(clampLine(v, line))
+        if (putCaret) {
+          v.dispatch({ selection: { anchor: l.from }, scrollIntoView: true })
+          v.focus()
+        } else {
+          v.dispatch({ effects: EditorView.scrollIntoView(l.from, { y: 'start', yMargin: 12 }) })
+        }
+      },
     }
     return () => {
       editorBridge.current = null
@@ -343,15 +406,15 @@ export default function MathFlowEditor({
   useEffect(() => () => flush(), [])
 
   return (
-    <div ref={containerRef} className="relative h-full w-full overflow-hidden">
-      <div ref={hostRef} className="mf-editor-host h-full w-full overflow-hidden" />
+    <div ref={containerRef} className="flex h-full w-full flex-col overflow-hidden">
+      <div ref={hostRef} className="mf-editor-host min-h-0 w-full flex-1 overflow-hidden" />
       {hud && (
         <FloatingMathHUD
           latex={hud.latex}
           display={hud.display}
           macros={getMacros()}
-          placement={hud.placement}
-          style={{ top: hud.top, left: hud.left }}
+          collapsed={hudCollapsed}
+          onToggleCollapse={toggleHudCollapsed}
           onChangeLatex={(latex) => {
             const v = viewRef.current
             if (!v) return
