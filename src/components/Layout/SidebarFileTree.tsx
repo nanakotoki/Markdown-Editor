@@ -14,7 +14,7 @@ import {
   RefreshCw,
   Trash2,
 } from 'lucide-react'
-import { baseName, parentDir, pathToDocId, type TreeNode } from '../../core/workspaceApi'
+import { baseName, parentDir, type TreeNode } from '../../core/workspaceApi'
 import { useEditorStore } from '../../store/useEditorStore'
 
 /**
@@ -61,11 +61,16 @@ export default function SidebarFileTree() {
     deleteLocalPath,
     workspace,
     showToast,
-    renameLocalDoc,
+    renameLocalPath,
   } = useEditorStore()
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   const [busy, setBusy] = useState(false)
   const [menu, setMenu] = useState<MenuState | null>(null)
+  /** 正在改名的节点路径；null 表示没有在改名 */
+  const [editing, setEditing] = useState<string | null>(null)
+  const [draft, setDraft] = useState('')
+  /** Esc 取消时抑制随后的 blur 提交 */
+  const skipBlurRef = useRef(false)
 
   const activePath = docs.find((d) => d.id === activeDocId)?.filePath ?? null
   const total = useMemo(() => countDocs(tree), [tree])
@@ -85,10 +90,17 @@ export default function SidebarFileTree() {
     setBusy(false)
   }
 
-  const rename = (node: TreeNode) => {
-    const next = window.prompt('重命名（含后缀）', node.name)
+  const startRename = (node: TreeNode) => {
+    skipBlurRef.current = false
+    setEditing(node.path)
+    setDraft(node.name)
+  }
+
+  const commitRename = (node: TreeNode) => {
+    const next = draft.trim()
+    setEditing(null)
     if (!next || next === node.name) return
-    void renameLocalDoc(pathToDocId(node.path), next)
+    void renameLocalPath(node.path, next)
   }
 
   const remove = async (node: TreeNode) => {
@@ -122,12 +134,13 @@ export default function SidebarFileTree() {
             role="treeitem"
             aria-expanded={isDir ? open : undefined}
             onClick={() => {
+              if (editing === node.path) return
               if (isDir) toggle(node.path)
               else if (isDoc(node)) void openFile(node.path)
               else showToast('这个格式不能在编辑器里打开', 'info')
             }}
             onDoubleClick={() => {
-              if (!isDir) rename(node)
+              if (editing !== node.path) startRename(node)
             }}
             onContextMenu={(e) => {
               e.preventDefault()
@@ -149,7 +162,40 @@ export default function SidebarFileTree() {
               <span className="w-[11px] shrink-0" />
             )}
             <span className="shrink-0">{iconFor(node, open)}</span>
-            <span className={`min-w-0 flex-1 truncate ${isDir ? 'text-ink-700' : ''}`}>{node.name}</span>
+            {editing === node.path ? (
+              <input
+                autoFocus
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                onClick={(e) => e.stopPropagation()}
+                onDoubleClick={(e) => e.stopPropagation()}
+                onFocus={(e) => {
+                  // 只选中主名，后缀留着——改 .md 为 .markdown 时才不用重敲
+                  const dot = e.currentTarget.value.lastIndexOf('.')
+                  e.currentTarget.setSelectionRange(0, dot > 0 ? dot : e.currentTarget.value.length)
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    e.currentTarget.blur()
+                  } else if (e.key === 'Escape') {
+                    e.preventDefault()
+                    skipBlurRef.current = true
+                    setEditing(null)
+                  }
+                }}
+                onBlur={() => {
+                  if (skipBlurRef.current) {
+                    skipBlurRef.current = false
+                    return
+                  }
+                  commitRename(node)
+                }}
+                className="min-w-0 flex-1 rounded border border-accent-400 bg-white px-1 py-0 text-[12px] text-ink-800 outline-none"
+              />
+            ) : (
+              <span className={`min-w-0 flex-1 truncate ${isDir ? 'text-ink-700' : ''}`}>{node.name}</span>
+            )}
           </div>
           {isDir && open && node.children && node.children.length > 0 && renderNodes(node.children, depth + 1)}
         </div>
@@ -202,9 +248,7 @@ export default function SidebarFileTree() {
             ...(menu.node.type === 'file' && isDoc(menu.node)
               ? [{ icon: <FileText size={12} />, label: '打开', run: () => void openFile(menu.node.path) }]
               : []),
-            ...(menu.node.type === 'file'
-              ? [{ icon: <PencilLine size={12} />, label: '重命名', run: () => rename(menu.node) }]
-              : []),
+            { icon: <PencilLine size={12} />, label: '重命名', run: () => startRename(menu.node) },
             {
               icon: <FilePlus2 size={12} />,
               label: '在此新建文档',

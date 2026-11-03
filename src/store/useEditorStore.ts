@@ -37,6 +37,8 @@ export type MathStyle = 'cm' | 'soft' | 'bold'
 
 /** 公式编号写法：(1-1) / 1-1 / 1.1 */
 export type EqTagStyle = 'paren' | 'dash' | 'dot'
+/** 落盘方式：改动即存 / 只有显式保存才写盘 */
+export type SaveMode = 'auto' | 'manual'
 export type ModalName =
   | 'matrix'
   | 'truth'
@@ -101,14 +103,21 @@ export interface Settings {
   citationStyle: 'numeric' | 'author-year'
   texTemplate: 'ctexart' | 'ctexbook' | 'article' | 'IEEEtran'
   showLineNumbers: boolean
+  /* ---- 保存方式：自动（停笔 0.8 秒落盘）/ 手动（只按 Ctrl+S 才写盘）---- */
+  saveMode: SaveMode
   /* ---- 外观：正文（渲染结果）---- */
   previewFont: 'serif' | 'song' | 'kai' | 'sans'
+  /** 自定义字体名，非空时覆盖上面的预设（写系统里已装的字体名，如「霞鹜文楷」） */
+  previewFontCustom: string
   previewFontSize: number
   previewLineHeight: number
   previewWeight: 400 | 500 | 600
   /* ---- 外观：源码（编辑区）---- */
   editorFont: 'serif' | 'mono' | 'sans' | 'kai'
+  editorFontCustom: string
   editorFontSize: number
+  /* ---- 产出（导出 HTML / PDF）：留空则跟随预览字体 ---- */
+  exportFontCustom: string
   /* ---- 分屏：滚动联动开关 ---- */
   syncScroll: boolean
   /* ---- 编号：定理按节（定义 1.1）还是全文连续（定义 1）---- */
@@ -134,12 +143,16 @@ export const DEFAULT_SETTINGS: Settings = {
   citationStyle: 'numeric',
   texTemplate: 'ctexart',
   showLineNumbers: true,
+  saveMode: 'auto',
   previewFont: 'serif',
+  previewFontCustom: '',
   previewFontSize: 16.5,
   previewLineHeight: 1.9,
   previewWeight: 400,
   editorFont: 'serif',
+  editorFontCustom: '',
   editorFontSize: 15,
+  exportFontCustom: '',
   syncScroll: true,
   thmNumbering: 'section',
   eqNumbering: 'global',
@@ -171,6 +184,10 @@ export function loadSettings(): Settings {
     if (!['paren', 'dash', 'dot'].includes(out.eqTagStyle)) out.eqTagStyle = 'paren'
     if (!['classic', 'beamer', 'boxed', 'plain'].includes(out.thmStyle)) out.thmStyle = 'classic'
     if (!['cm', 'soft', 'bold'].includes(out.mathStyle)) out.mathStyle = 'soft'
+    if (out.saveMode !== 'manual' && out.saveMode !== 'auto') out.saveMode = 'auto'
+    if (typeof out.previewFontCustom !== 'string') out.previewFontCustom = ''
+    if (typeof out.editorFontCustom !== 'string') out.editorFontCustom = ''
+    if (typeof out.exportFontCustom !== 'string') out.exportFontCustom = ''
     if (typeof out.qedSymbol !== 'string') out.qedSymbol = '∎'
     if (typeof out.pageGuides !== 'boolean') out.pageGuides = true
     if (typeof out.thmBodyKai !== 'boolean') out.thmBodyKai = true
@@ -358,6 +375,8 @@ interface EditorState {
   /** 按路径删除（文件树右键用：未打开过的文件不在 docs 里） */
   deleteLocalPath: (path: string) => Promise<void>
   renameLocalDoc: (id: string, name: string) => Promise<void>
+  /** 按路径重命名（文件树用：未打开过的文件/文件夹也能改名） */
+  renameLocalPath: (path: string, name: string) => Promise<void>
   applyExternalChange: (paths: string[]) => void
   workspaceRefs: () => RefEntry[]
   workspaceBib: () => BibEntry[]
@@ -526,8 +545,17 @@ export const useEditorStore = create<EditorState>()(
       },
 
       closeTab: (id) => {
-        const { openTabs, docs, activeDocId } = get()
+        const { openTabs, docs, activeDocId, fileState, settings } = get()
         if (openTabs.length <= 1) return
+        // 手动保存模式下关掉未保存的标签会丢改动，先问一句
+        if (fileState[id] === 'dirty') {
+          if (settings.saveMode === 'manual') {
+            if (!window.confirm('这个文件还有未保存的修改，关闭标签会丢掉这些改动。确定关闭吗？')) return
+          } else {
+            cancelSave(id)
+            void get().saveDoc(id)
+          }
+        }
         const idx = openTabs.indexOf(id)
         const nextTabs = openTabs.filter((t) => t !== id)
         const nextActive = id === activeDocId ? nextTabs[Math.max(0, idx - 1)] : activeDocId
@@ -695,6 +723,45 @@ export const useEditorStore = create<EditorState>()(
         }
       },
 
+      /**
+       * 按路径重命名。与 renameLocalDoc 的区别：
+       *  · 不依赖 docs —— 从没打开过的文件、整个文件夹都能改名（旧版这里会静默失败）
+       *  · 不强行补 .md 后缀，.bib / .tex / .txt 改名不会被改坏
+       *  · 目录改名后，已打开的子文件路径会一并迁移，避免指向不存在的旧路径
+       */
+      renameLocalPath: async (path, name) => {
+        const clean = name.trim().replace(/[/\\]/g, '-')
+        if (!clean || clean === baseName(path)) return
+        const dir = parentDir(path)
+        const target = dir ? `${dir}/${clean}` : clean
+        if (target === path) return
+        try {
+          // 已打开的文件先落盘，否则改名带走的还是磁盘上的旧内容
+          const openDoc = get().docs.find((d) => d.filePath === path)
+          if (openDoc) {
+            cancelSave(openDoc.id)
+            await get().saveDoc(openDoc.id)
+          }
+          await apiMoveFile(path, target)
+          const nextId = pathToDocId(target)
+          set((s) => ({
+            docs: s.docs.map((d) =>
+              d.filePath === path ? { ...d, id: nextId, title: baseName(target), filePath: target } : d
+            ),
+            openTabs: s.openTabs.map((t) => (t === pathToDocId(path) ? nextId : t)),
+            activeDocId: s.activeDocId === pathToDocId(path) ? nextId : s.activeDocId,
+            fileState: openDoc
+              ? { ...s.fileState, [nextId]: s.fileState[openDoc.id] ?? 'clean' }
+              : s.fileState,
+          }))
+          await get().refreshTree()
+          void get().refreshIndex()
+          get().showToast(`已重命名为 ${clean}`, 'success')
+        } catch (e: any) {
+          get().showToast(e?.message ?? '重命名失败', 'warn')
+        }
+      },
+
       /** 后端推送的文件变更：只标记状态，不擅自覆盖用户正在编辑的内容 */
       applyExternalChange: (paths) => {
         const state = get()
@@ -744,7 +811,8 @@ export const useEditorStore = create<EditorState>()(
               ? { ...s.fileState, [id]: 'dirty' }
               : s.fileState,
         }))
-        if (get().mode === 'local' && get().docs.find((d) => d.id === id)?.filePath) {
+        // 手动保存模式下不排自动落盘：标签会一直亮着未保存标记，等用户 Ctrl+S
+        if (get().mode === 'local' && get().settings.saveMode !== 'manual' && get().docs.find((d) => d.id === id)?.filePath) {
           scheduleSave(id)
         }
       },
@@ -806,6 +874,7 @@ export const useEditorStore = create<EditorState>()(
       addLibraryFormula: (f) => get().addFavorite({ name: f.name, latex: f.latex, tags: [f.category] }),
       setAIConfig: (c) => set((s) => ({ aiConfig: { ...s.aiConfig, ...c } })),
       updateSettings: (s2) => {
+        const prevSaveMode = get().settings.saveMode
         set((s) => {
           const next = { ...s.settings, ...s2 }
           try {
@@ -815,17 +884,27 @@ export const useEditorStore = create<EditorState>()(
           }
           return { settings: next }
         })
+        // 从手动切回自动：把积压的改动立刻补存，避免一直挂着未保存标记
+        if (prevSaveMode === 'manual' && get().settings.saveMode === 'auto') {
+          const st = get()
+          for (const d of st.docs) {
+            if (d.filePath && st.fileState[d.id] === 'dirty') scheduleSave(d.id, 0)
+          }
+        }
       },
       resetAppearance: () =>
         set((s) => {
           const next: Settings = {
             ...s.settings,
             previewFont: DEFAULT_SETTINGS.previewFont,
+            previewFontCustom: DEFAULT_SETTINGS.previewFontCustom,
             previewFontSize: DEFAULT_SETTINGS.previewFontSize,
             previewLineHeight: DEFAULT_SETTINGS.previewLineHeight,
             previewWeight: DEFAULT_SETTINGS.previewWeight,
             editorFont: DEFAULT_SETTINGS.editorFont,
+            editorFontCustom: DEFAULT_SETTINGS.editorFontCustom,
             editorFontSize: DEFAULT_SETTINGS.editorFontSize,
+            exportFontCustom: DEFAULT_SETTINGS.exportFontCustom,
             mathStyle: DEFAULT_SETTINGS.mathStyle,
             thmBodyKai: DEFAULT_SETTINGS.thmBodyKai,
             thmStyle: DEFAULT_SETTINGS.thmStyle,

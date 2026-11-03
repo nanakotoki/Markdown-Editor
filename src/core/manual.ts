@@ -57,8 +57,14 @@ export const MANUAL_SECTIONS: ManualSection[] = [
       {
         title: '保存',
         syntax: 'Ctrl + S',
-        note: '平时是自动保存（停止输入约 0.8 秒后落盘），Ctrl+S 只是给你一个确定的手感。标签上有小圆点表示还没写入磁盘。',
+        note: '默认自动保存：停笔约 0.8 秒后落盘，标签上的小圆点表示还没写入磁盘。想自己掌握节奏，就去「工具 → 字体与外观 → 保存」切成「手动保存」——之后只有按 Ctrl+S 或点标签栏右侧的「保存」按钮才写盘，关掉未保存的标签前会先问一句。',
         tag: '快捷键',
+      },
+      {
+        title: '换字体（源码 / 正文 / 导出）',
+        syntax: '工具 → 字体与外观',
+        note: '源码区、渲染结果、导出的 PDF 可以各自设字体。预设不够用时，在「自定义」里直接填系统里已装的字体名（例如 霞鹜文楷、JetBrains Mono），点「检测」能确认到底有没有装；导出字体留空就跟随预览字体。',
+        tag: '外观',
       },
       {
         title: '导出整本',
@@ -365,7 +371,11 @@ export const MANUAL_SECTIONS: ManualSection[] = [
       },
       {
         title: '函数绘图',
-        note: '走「工具 → 函数绘图 / 矩阵计算」，输入表达式（如 `x^2`、`sin(x)`）即可。插入的是一张 SVG 图片，形如 `![函数图像](data:image/svg+xml;…)`，不依赖网络。',
+        note: '走「工具 → 函数绘图 / 矩阵计算」，输入表达式（如 `x^2`、`\\sin x`）即可。插入的是一张 SVG 图片，形如 `![函数图像](data:image/svg+xml;…)`，不依赖网络。',
+      },
+      {
+        title: '绘图能认的写法',
+        note: '函数：sin cos tan cot sec csc、arcsin/arccos/arctan、sinh 系列、exp ln lg log_2、sqrt、frac、abs、floor/ceil/round/sign、max/min、gamma、erf、阶乘。写法上认 \\sin^2 x、\\sin^{-1} x、\\log_{2} x、\\sqrt[3]{x}、x(x+1)、2x、|x|、\\lfloor x \\rfloor、e^{-x^2}。多条曲线用分号隔开，例如 `\\sin x; \\cos x; x/3`，每条一个颜色，图例里能看到转换后的表达式。自变量统一用 x。',
       },
       {
         title: '矩阵计算',

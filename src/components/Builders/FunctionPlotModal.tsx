@@ -1,13 +1,26 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Calculator, Download, ImagePlus, Info, LineChart, RotateCcw } from 'lucide-react'
 import { Button, Field, Modal, Segmented, TextInput } from '../ui'
-import { analyzeMatrix, matrixToLatex, sampleFunction, type MatrixAnalysis } from '../../core/mathEvaluator'
+import { analyzeMatrix, matrixToLatex, sampleFunctions, type MatrixAnalysis, type PlotCurve } from '../../core/mathEvaluator'
+import { PLOT_SUPPORT_NOTE } from '../../core/plotParser'
 import { editorBridge } from '../../store/editorBridge'
 import { downloadFormulaPng } from '../../core/clipboardExport'
 import { renderMathSafely } from '../../core/katexSafeRender'
 import { useEditorStore } from '../../store/useEditorStore'
 
-const PRESETS = ['\\sin(x)/x', 'x^{3}-3x', 'e^{-x^{2}}', '\\frac{1}{1+e^{-x}}', '\\ln(x)', 'x^{2}\\sin(1/x)']
+/** 常用示例：前几条是论文里真正会画的图，后几条演示新支持的写法 */
+const PRESETS = [
+  '\\sin(x)/x',
+  'x^{3}-3x',
+  'e^{-x^{2}}',
+  '\\frac{1}{1+e^{-x}}',
+  '\\ln(x)',
+  '\\sin x; \\cos x',
+  '\\sqrt[3]{x}',
+  '|x|; \\lfloor x \\rfloor',
+  '\\tan x',
+  '\\sin^2 x + \\cos^2 x',
+]
 
 export default function FunctionPlotModal({
   open,
@@ -37,17 +50,36 @@ export default function FunctionPlotModal({
     }
   }, [open, seed])
 
-  const data = useMemo(() => sampleFunction(expr, domain[0], domain[1], 1000), [expr, domain])
+  // 多曲线：分号分隔，一次画完
+  const data = useMemo(() => sampleFunctions(expr, domain[0], domain[1], 1000), [expr, domain])
 
   useEffect(() => {
     if (!data.ok) return
-    const [lo, hi] = data.yRange
-    const pad = (hi - lo) * 0.12 || 1
+    // 用全部分位裁剪纵轴，避免 1/x 之类把坐标轴拉到 ±10⁶，图变成一条竖线
+    const ys = data.curves
+      .flatMap((c) => c.points.map((p) => p.y))
+      .filter((y) => Number.isFinite(y))
+      .sort((a, b) => a - b)
+    let lo: number
+    let hi: number
+    if (ys.length >= 20) {
+      const at = (p: number) => ys[Math.min(ys.length - 1, Math.max(0, Math.floor(p * (ys.length - 1))))]
+      lo = at(0.02)
+      hi = at(0.98)
+    } else {
+      lo = Math.min(...data.curves.map((c) => c.yRange[0]))
+      hi = Math.max(...data.curves.map((c) => c.yRange[1]))
+    }
+    if (!(hi > lo)) {
+      lo = Math.min(...data.curves.map((c) => c.yRange[0]))
+      hi = Math.max(...data.curves.map((c) => c.yRange[1]))
+    }
+    const pad = (hi - lo) * 0.15 || 1
     setYDomain([lo - pad, hi + pad])
   }, [data])
 
   const plotSvg = useMemo(
-    () => (data.ok ? buildPlotSvg(data.points, domain, yDomain, data.extrema, 760, 420) : ''),
+    () => (data.ok ? buildPlotSvg(data.curves, domain, yDomain, 760, 420) : ''),
     [data, domain, yDomain]
   )
 
@@ -112,34 +144,36 @@ export default function FunctionPlotModal({
       ctx.fillText(String(Number(x.toFixed(3))), sx(x) + 2, Math.min(H - 4, Math.max(12, sy(0) + 12)))
     }
 
-    // 曲线
-    ctx.strokeStyle = '#2a55d4'
-    ctx.lineWidth = 2
-    ctx.beginPath()
-    let started = false
-    for (const p of data.points) {
-      const px = sx(p.x)
-      const py = sy(p.y)
-      if (!Number.isFinite(px) || !Number.isFinite(py) || Math.abs(py) > H * 40) {
-        started = false
-        continue
-      }
-      if (!started) {
-        ctx.moveTo(px, py)
-        started = true
-      } else ctx.lineTo(px, py)
-    }
-    ctx.stroke()
-
-    // 极值点
-    for (const e of data.extrema) {
-      const px = sx(e.x)
-      const py = sy(e.y)
-      if (px < -20 || px > W + 20 || py < -20 || py > H + 20) continue
-      ctx.fillStyle = e.kind === 'max' ? '#dc2626' : '#059669'
+    // 曲线（每条一个颜色）
+    for (const curve of data.curves) {
+      ctx.strokeStyle = curve.color
+      ctx.lineWidth = 2
       ctx.beginPath()
-      ctx.arc(px, py, 3.5, 0, Math.PI * 2)
-      ctx.fill()
+      let started = false
+      for (const p of curve.points) {
+        const px = sx(p.x)
+        const py = sy(p.y)
+        if (!Number.isFinite(px) || !Number.isFinite(py) || Math.abs(py) > H * 40) {
+          started = false
+          continue
+        }
+        if (!started) {
+          ctx.moveTo(px, py)
+          started = true
+        } else ctx.lineTo(px, py)
+      }
+      ctx.stroke()
+
+      // 极值点跟随曲线颜色
+      for (const e of curve.extrema) {
+        const px = sx(e.x)
+        const py = sy(e.y)
+        if (px < -20 || px > W + 20 || py < -20 || py > H + 20) continue
+        ctx.fillStyle = e.kind === 'max' ? '#dc2626' : '#059669'
+        ctx.beginPath()
+        ctx.arc(px, py, 3.5, 0, Math.PI * 2)
+        ctx.fill()
+      }
     }
 
     // 悬停十字线
@@ -230,17 +264,25 @@ export default function FunctionPlotModal({
 
       {tab === 'plot' ? (
         <div className="space-y-3">
-          <div className="grid grid-cols-[1fr_90px_90px_auto] items-end gap-2">
-            <Field label="函数表达式 f(x)" hint="支持 \sin \cos \exp \ln \sqrt \frac \pi 等，可省略 y=">
-              <TextInput value={expr} onChange={setExpr} mono />
-            </Field>
-            <Field label="定义域起">
-              <TextInput value={String(xMin)} onChange={(v) => setXMin(Number(v) || 0)} mono />
-            </Field>
-            <Field label="定义域止">
-              <TextInput value={String(xMax)} onChange={(v) => setXMax(Number(v) || 0)} mono />
-            </Field>
+          {/* 窄窗口下自动换行，避免「定义域」几个输入被挤出面板 */}
+          <div className="flex flex-wrap items-end gap-2">
+            <div className="min-w-[220px] flex-1">
+              <Field label="函数表达式 f(x)" hint="分号分隔可画多条，y= 可省略">
+                <TextInput value={expr} onChange={setExpr} mono />
+              </Field>
+            </div>
+            <div className="w-[84px] shrink-0">
+              <Field label="定义域起">
+                <TextInput value={String(xMin)} onChange={(v) => setXMin(Number(v) || 0)} mono />
+              </Field>
+            </div>
+            <div className="w-[84px] shrink-0">
+              <Field label="定义域止">
+                <TextInput value={String(xMax)} onChange={(v) => setXMax(Number(v) || 0)} mono />
+              </Field>
+            </div>
             <Button
+              className="shrink-0"
               variant="primary"
               onClick={() => {
                 const a = Math.min(xMin, xMax)
@@ -264,9 +306,32 @@ export default function FunctionPlotModal({
             ))}
           </div>
 
+          {/* 图例：多曲线时一眼看出哪条是谁 */}
+          {data.ok && data.curves.length > 0 && (
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              {data.curves.map((c, i) => (
+                <span key={`${c.source}-${i}`} className="flex items-center gap-1.5 text-[11.5px] text-ink-600">
+                  <span className="h-2 w-2 rounded-full" style={{ background: c.color }} />
+                  <span className="font-mono">{c.source}</span>
+                  <span className="text-[10px] text-ink-300">→ {c.expr}</span>
+                </span>
+              ))}
+            </div>
+          )}
+
           {!data.ok && (
             <div className="flex items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-[12px] text-rose-600">
               <Info size={13} /> {data.error}
+            </div>
+          )}
+
+          {data.ok && data.notes.length > 0 && (
+            <div className="flex flex-col gap-1 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11.5px] text-amber-700">
+              {data.notes.map((n, i) => (
+                <div key={i} className="flex items-start gap-1.5">
+                  <Info size={12} className="mt-[2px] shrink-0" /> {n}
+                </div>
+              ))}
             </div>
           )}
 
@@ -325,21 +390,32 @@ export default function FunctionPlotModal({
             </div>
           </div>
 
-          {data.ok && data.extrema.length > 0 && (
-            <div className="flex flex-wrap gap-1.5">
+          {data.ok && data.curves.some((c) => c.extrema.length > 0) && (
+            <div className="flex flex-wrap items-center gap-1.5">
               <span className="text-[11px] text-ink-400">极值点：</span>
-              {data.extrema.slice(0, 8).map((e, i) => (
-                <span
-                  key={i}
-                  className={`rounded px-1.5 py-0.5 font-mono text-[11px] ${
-                    e.kind === 'max' ? 'bg-rose-50 text-rose-600' : 'bg-emerald-50 text-emerald-700'
-                  }`}
-                >
-                  {e.kind === 'max' ? '极大' : '极小'} ({e.x.toFixed(2)}, {e.y.toFixed(3)})
-                </span>
-              ))}
+              {data.curves
+                .flatMap((c) => c.extrema.map((e) => ({ ...e, color: c.color })))
+                .slice(0, 10)
+                .map((e, i) => (
+                  <span
+                    key={i}
+                    className={`rounded px-1.5 py-0.5 font-mono text-[11px] ${
+                      e.kind === 'max' ? 'bg-rose-50 text-rose-600' : 'bg-emerald-50 text-emerald-700'
+                    }`}
+                  >
+                    {e.kind === 'max' ? '极大' : '极小'} ({e.x.toFixed(2)}, {e.y.toFixed(3)})
+                  </span>
+                ))}
             </div>
           )}
+
+          <details className="rounded-lg border border-ink-200 bg-ink-50/60 px-3 py-2">
+            <summary className="cursor-pointer text-[11.5px] text-ink-500">支持哪些写法</summary>
+            <p className="mt-1.5 text-[11px] leading-relaxed text-ink-500">{PLOT_SUPPORT_NOTE}</p>
+            <p className="mt-1 text-[11px] leading-relaxed text-ink-400">
+              多条曲线用分号分开，例如 <span className="font-mono">\sin x; \cos x; x/3</span>。自变量统一用 x。
+            </p>
+          </details>
         </div>
       ) : (
         <div className="space-y-3">
@@ -428,10 +504,9 @@ function niceStep(range: number, count: number): number {
 }
 
 function buildPlotSvg(
-  points: Array<{ x: number; y: number }>,
+  curves: PlotCurve[],
   domain: [number, number],
   yDomain: [number, number],
-  extrema: Array<{ x: number; y: number; kind: 'max' | 'min' }>,
   W = 760,
   H = 420
 ): string {
@@ -454,23 +529,32 @@ function buildPlotSvg(
     (y0 <= 0 && y1 >= 0 ? `<line x1="0" y1="${sy(0).toFixed(1)}" x2="${W}" y2="${sy(0).toFixed(1)}" stroke="#c6ccd8"/>` : '') +
     (x0 <= 0 && x1 >= 0 ? `<line x1="${sx(0).toFixed(1)}" y1="0" x2="${sx(0).toFixed(1)}" y2="${H}" stroke="#c6ccd8"/>` : '')
 
-  let d = ''
-  let started = false
-  for (const p of points) {
-    const px = sx(p.x)
-    const py = sy(p.y)
-    if (!Number.isFinite(px) || !Number.isFinite(py) || Math.abs(py) > H * 40) {
-      started = false
-      continue
+  let paths = ''
+  let dots = ''
+  for (const curve of curves) {
+    let d = ''
+    let started = false
+    for (const p of curve.points) {
+      const px = sx(p.x)
+      const py = sy(p.y)
+      if (!Number.isFinite(px) || !Number.isFinite(py) || Math.abs(py) > H * 40) {
+        started = false
+        continue
+      }
+      d += `${started ? 'L' : 'M'}${px.toFixed(2)} ${py.toFixed(2)} `
+      started = true
     }
-    d += `${started ? 'L' : 'M'}${px.toFixed(2)} ${py.toFixed(2)} `
-    started = true
+    if (d) {
+      paths += `<path d="${d.trim()}" fill="none" stroke="${curve.color}" stroke-width="2" stroke-linejoin="round"/>`
+    }
+    dots += curve.extrema
+      .filter((e) => sx(e.x) >= 0 && sx(e.x) <= W && sy(e.y) >= 0 && sy(e.y) <= H)
+      .map(
+        (e) =>
+          `<circle cx="${sx(e.x).toFixed(1)}" cy="${sy(e.y).toFixed(1)}" r="3.5" fill="${e.kind === 'max' ? '#dc2626' : '#059669'}"/>`
+      )
+      .join('')
   }
 
-  const dots = extrema
-    .filter((e) => sx(e.x) >= 0 && sx(e.x) <= W && sy(e.y) >= 0 && sy(e.y) <= H)
-    .map((e) => `<circle cx="${sx(e.x).toFixed(1)}" cy="${sy(e.y).toFixed(1)}" r="3.5" fill="${e.kind === 'max' ? '#dc2626' : '#059669'}"/>`)
-    .join('')
-
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"><rect width="${W}" height="${H}" fill="#ffffff"/>${grid}${axes}<path d="${d.trim()}" fill="none" stroke="#2a55d4" stroke-width="2" stroke-linejoin="round"/>${dots}</svg>`
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"><rect width="${W}" height="${H}" fill="#ffffff"/>${grid}${axes}${paths}${dots}</svg>`
 }

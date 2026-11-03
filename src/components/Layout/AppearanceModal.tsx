@@ -1,10 +1,12 @@
-import { RotateCcw, Type } from 'lucide-react'
+import { useState } from 'react'
+import { Check, RotateCcw, TriangleAlert, Type } from 'lucide-react'
 import { Modal } from '../ui'
 import { useEditorStore } from '../../store/useEditorStore'
 import {
   EDITOR_FONTS,
   PREVIEW_FONTS,
   editorFontStack,
+  isFontAvailable,
   previewFontStack,
   type EditorFontKey,
   type PreviewFontKey,
@@ -24,6 +26,7 @@ export default function AppearanceModal({ open, onClose }: { open: boolean; onCl
   const settings = useEditorStore((s) => s.settings)
   const updateSettings = useEditorStore((s) => s.updateSettings)
   const reset = useEditorStore((s) => s.resetAppearance)
+  const mode = useEditorStore((s) => s.mode)
 
   return (
     <Modal
@@ -35,6 +38,27 @@ export default function AppearanceModal({ open, onClose }: { open: boolean; onCl
       width="max-w-4xl"
     >
       <div className="space-y-4">
+        {/* ---------------- 保存方式 ---------------- */}
+        <div className="rounded-xl border border-ink-200 p-3">
+          <SectionTitle>保存</SectionTitle>
+          <Row label="写入磁盘">
+            <Pills
+              value={settings.saveMode}
+              options={[
+                { v: 'auto' as const, label: '自动保存' },
+                { v: 'manual' as const, label: '手动保存（Ctrl+S）' },
+              ]}
+              onChange={(v) => updateSettings({ saveMode: v })}
+            />
+            <p className="mt-1.5 text-[11px] leading-relaxed text-ink-400">
+              {settings.saveMode === 'auto'
+                ? '停笔约 0.8 秒后自动写盘，标签上的圆点变蓝表示正在保存。'
+                : '只在你按 Ctrl+S（或点工具栏的保存）时写盘；有未保存改动的标签会亮橙色圆点，关闭标签前会提醒。'}
+              {mode !== 'local' && '　浏览器内文档始终存在本地，此项只在打开工作区目录后生效。'}
+            </p>
+          </Row>
+        </div>
+
         <div className="grid grid-cols-2 gap-6">
           {/* ---------------- 渲染结果 ---------------- */}
           <section>
@@ -53,6 +77,14 @@ export default function AppearanceModal({ open, onClose }: { open: boolean; onCl
                   />
                 ))}
               </div>
+            </Row>
+
+            <Row label="自定义">
+              <FontNameInput
+                value={settings.previewFontCustom}
+                placeholder="已装字体名，如 霞鹜文楷"
+                onChange={(v) => updateSettings({ previewFontCustom: v })}
+              />
             </Row>
 
             <Row label="字号">
@@ -102,6 +134,17 @@ export default function AppearanceModal({ open, onClose }: { open: boolean; onCl
                 宋体只有常规一档，选「加粗」由系统合成加厚；装了思源宋体则用真实的 Medium / SemiBold。
               </p>
             </Row>
+
+            <Row label="导出字体">
+              <FontNameInput
+                value={settings.exportFontCustom}
+                placeholder="留空则与上面一致"
+                onChange={(v) => updateSettings({ exportFontCustom: v })}
+              />
+              <p className="mt-1.5 text-[11px] leading-relaxed text-ink-400">
+                只作用于导出的 HTML / PDF。想让屏幕用黑体、交稿用宋体，就在这里单独填一个。
+              </p>
+            </Row>
           </section>
 
           {/* ---------------- 编辑区 ---------------- */}
@@ -121,6 +164,14 @@ export default function AppearanceModal({ open, onClose }: { open: boolean; onCl
                   />
                 ))}
               </div>
+            </Row>
+
+            <Row label="自定义">
+              <FontNameInput
+                value={settings.editorFontCustom}
+                placeholder="等宽字体名，如 JetBrains Mono"
+                onChange={(v) => updateSettings({ editorFontCustom: v })}
+              />
             </Row>
 
             <Row label="字号">
@@ -404,6 +455,65 @@ function Pills<T extends string>({
           {o.label}
         </button>
       ))}
+    </div>
+  )
+}
+
+/**
+ * 自定义字体名输入 + 「检测」。
+ * 预设之外总有漏网之鱼（自己装的霞鹜文楷、公司规范字体……），
+ * 直接填名字即可；检测按钮用画布量宽度判断系统里到底有没有，
+ * 免得填错名字后一头雾水地以为是软件坏了。
+ */
+function FontNameInput({
+  value,
+  placeholder,
+  onChange,
+}: {
+  value: string
+  placeholder: string
+  onChange: (v: string) => void
+}) {
+  const [status, setStatus] = useState<'idle' | 'ok' | 'missing'>('idle')
+
+  const probe = () => {
+    if (!value.trim()) {
+      setStatus('idle')
+      return
+    }
+    setStatus(isFontAvailable(value) ? 'ok' : 'missing')
+  }
+
+  return (
+    <div>
+      <div className="flex items-center gap-1.5">
+        <input
+          value={value}
+          onChange={(e) => {
+            onChange(e.target.value)
+            setStatus('idle')
+          }}
+          onBlur={probe}
+          placeholder={placeholder}
+          className="h-7 w-full min-w-0 rounded-lg border border-ink-200 px-2 text-[12px] outline-none focus:border-accent-400"
+        />
+        <button
+          onClick={probe}
+          className="shrink-0 rounded-lg px-2 py-1 text-[11px] text-ink-500 ring-1 ring-ink-200 transition hover:bg-ink-50"
+        >
+          检测
+        </button>
+      </div>
+      {status === 'ok' && (
+        <p className="mt-1 flex items-center gap-1 text-[10.5px] text-emerald-600">
+          <Check size={10} /> 系统里有这个字体，已生效
+        </p>
+      )}
+      {status === 'missing' && (
+        <p className="mt-1 flex items-center gap-1 text-[10.5px] text-amber-600">
+          <TriangleAlert size={10} /> 没找到这个名字，会退回预设字体
+        </p>
+      )}
     </div>
   )
 }

@@ -3,7 +3,7 @@ import { getInlinedKatexCss } from './clipboardExport'
 import { ACADEMIC_CSS } from './academicCss'
 import type { MacroMap } from './katexSafeRender'
 import { DEFAULT_SETTINGS, type BibEntry, type Settings } from '../store/useEditorStore'
-import { KAI_STACK, previewFontStack } from './appearance'
+import { KAI_STACK, resolveExportStack } from './appearance'
 
 /**
  * ============================================================================
@@ -40,9 +40,10 @@ export async function buildStandaloneHtml(markdown: string, opts: HtmlExportOpti
   const katex = await getInlinedKatexCss()
   const date = new Date().toLocaleDateString('zh-CN')
   /** 把外观设置写成内联变量：导出的 HTML 与应用里看到的排版一致 */
+  const exportFont = resolveExportStack(settings)
   const bodyStyle = [
-    `--mf-serif:${previewFontStack(settings.previewFont)}`,
-    `--mf-thm-body-font:${settings.thmBodyKai ? KAI_STACK : previewFontStack(settings.previewFont)}`,
+    `--mf-serif:${exportFont}`,
+    `--mf-thm-body-font:${settings.thmBodyKai ? KAI_STACK : exportFont}`,
     `font-size:${settings.previewFontSize}px`,
     `line-height:${settings.previewLineHeight}`,
     `font-weight:${settings.previewWeight}`,

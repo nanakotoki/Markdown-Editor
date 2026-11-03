@@ -1,4 +1,5 @@
 import { det, inv, matrix, trace, transpose, format, compile, parse } from 'mathjs'
+import { latexToExpression, splitCurveSources, freeVariables } from './plotParser'
 
 /**
  * ============================================================================
@@ -208,66 +209,58 @@ export interface FunctionPlotResult {
   yRange: [number, number]
 }
 
-/** 把 LaTeX 公式转换成 mathjs 可解析的表达式 */
-export function latexToExpression(input: string): string {
-  let s = ' ' + input + ' '
-  // 去掉公式环境外壳
-  s = s.replace(/\\begin\{[a-zA-Z*]+\}/g, ' ').replace(/\\end\{[a-zA-Z*]+\}/g, ' ')
-  s = s.replace(/\\label\{[^{}]*\}/g, ' ')
-  // 去掉 y = / f(x) = 前缀
-  s = s.replace(/\b(y|f\s*\(\s*x\s*\))\s*=/g, ' ')
-  s = s.replace(/\\left|\\right|\\!|\\,|\\;|\\:|\\quad|\\qquad|\\displaystyle|\\limits/g, ' ')
-  // 绝对值
-  s = s.replace(/\\left\|([\s\S]*?)\\right\|/g, 'abs($1)')
-  s = s.replace(/\\lvert([\s\S]*?)\\rvert/g, 'abs($1)')
-  s = s.replace(/\\mathrm\{d\}/g, 'd')
-  // 函数名
-  const funcs = [
-    'sinh', 'cosh', 'tanh', 'arcsin', 'arccos', 'arctan', 'sin', 'cos', 'tan', 'cot', 'sec', 'csc',
-    'exp', 'log', 'ln', 'lg', 'sqrt', 'abs', 'max', 'min', 'floor', 'ceil', 'sign',
-  ]
-  for (const f of funcs) {
-    s = s.replace(new RegExp(`\\\\${f}\\b`, 'g'), f === 'ln' ? 'log' : f === 'lg' ? 'log10' : f)
-  }
-  // 根号
-  s = s.replace(/sqrt\s*\[([^\]]*)\]\s*\{([^{}]*)\}/g, '($2)^(1/($1))')
-  s = s.replace(/sqrt\s*\{([^{}]*)\}/g, 'sqrt($1)')
-  // 分数（由内向外逐层归一，最多 8 层）
-  for (let i = 0; i < 8; i++) {
-    const next = s.replace(/\\[dtc]?frac\s*\{([^{}]*)\}\s*\{([^{}]*)\}/g, '(($1)/($2))')
-    if (next === s) break
-    s = next
-  }
-  // 常数与运算符
-  s = s
-    .replace(/\\pi\b/g, 'pi')
-    .replace(/\\tau\b/g, 'tau')
-    .replace(/\\cdot|\\times/g, '*')
-    .replace(/\\div/g, '/')
-    .replace(/\\operatorname\{([^{}]*)\}/g, '$1')
-    .replace(/\\mathrm\{([^{}]*)\}/g, '$1')
-    .replace(/\\text\{([^{}]*)\}/g, '$1')
-  // 指数 e^{...} / e^2
-  s = s.replace(/\be\s*\^\s*\{([^{}]*)\}/g, 'exp($1)')
-  s = s.replace(/\be\s*\^\s*\(?(-?[\w.]+)\)?/g, 'exp($1)')
-  s = s.replace(/\be\b(?!\w)/g, 'e')
-  // 上下标：^{...} / _{...}
-  s = s.replace(/\^\s*\{([^{}]*)\}/g, '^($1)')
-  s = s.replace(/_\s*\{([^{}]*)\}/g, '_($1)')
-  // 残余花括号
-  s = s.replace(/\{/g, '(').replace(/\}/g, ')')
-  s = s.replace(/\\[a-zA-Z]+/g, '')
-  s = s.replace(/\s+/g, ' ').trim()
-  return s
+/**
+ * LaTeX 公式 → mathjs 可解析的表达式。
+ * 具体实现搬到 plotParser.ts（递归下降，支持 \frac / \sqrt[n] / \sin^2 x / \log_a 等），
+ * 这里保留同名导出，老的调用点不用改。
+ */
+export { latexToExpression, splitCurveSources } from './plotParser'
+
+/** 采样一组曲线时的结果（一条曲线一个颜色） */
+export interface PlotCurve {
+  /** 原始输入（LaTeX） */
+  source: string
+  /** 转换后的表达式，界面上可以核对 */
+  expr: string
+  points: PlotSample[]
+  extrema: Array<{ x: number; y: number; kind: 'max' | 'min' }>
+  yRange: [number, number]
+  color: string
 }
 
-export function sampleFunction(latex: string, xMin: number, xMax: number, samples = 800): FunctionPlotResult {
+export interface MultiPlotResult {
+  ok: boolean
+  error?: string
+  curves: PlotCurve[]
+  /** 部分曲线失败的提示，成功画出的照常显示 */
+  notes: string[]
+}
+
+const CURVE_COLORS = ['#2a55d4', '#dc2626', '#059669', '#c2410c', '#7c3aed', '#0891b2', '#be185d', '#0f766e']
+
+export function curveColor(i: number): string {
+  return CURVE_COLORS[i % CURVE_COLORS.length]
+}
+
+function sampleOne(
+  latex: string,
+  xMin: number,
+  xMax: number,
+  samples: number
+): { ok: boolean; error?: string; expr: string; points: PlotSample[]; extrema: Array<{ x: number; y: number; kind: 'max' | 'min' }>; yRange: [number, number] } {
   const expr = latexToExpression(latex)
   let code: any
   try {
     code = compile(expr)
   } catch (e: any) {
-    return { ok: false, error: `无法解析为函数表达式：${e?.message ?? ''}`, expr, points: [], extrema: [], yRange: [-1, 1] }
+    return {
+      ok: false,
+      error: `无法解析为函数表达式：${e?.message ?? ''}`,
+      expr,
+      points: [],
+      extrema: [],
+      yRange: [-1, 1],
+    }
   }
   const points: PlotSample[] = []
   let yMin = Infinity
@@ -278,7 +271,7 @@ export function sampleFunction(latex: string, xMin: number, xMax: number, sample
     const x = xMin + i * step
     let y: number
     try {
-      y = Number(code.evaluate({ x, e: Math.E, pi: Math.PI, tau: Math.PI * 2 }))
+      y = Number(code.evaluate({ x, e: Math.E, pi: Math.PI, tau: Math.PI * 2, phi: (1 + Math.sqrt(5)) / 2 }))
     } catch {
       continue
     }
@@ -289,7 +282,18 @@ export function sampleFunction(latex: string, xMin: number, xMax: number, sample
     if (y > yMax) yMax = y
   }
   if (!found) {
-    return { ok: false, error: '在指定定义域内没有取得有效函数值（可能含奇点或未定义）', expr, points: [], extrema: [], yRange: [-1, 1] }
+    // 常见原因其实是「写了 x 以外的字母」，单独给一个说得清的提示
+    const fv = freeVariables(expr).filter((v) => v !== 'x')
+    return {
+      ok: false,
+      error: fv.length
+        ? `表达式里的 ${fv.join('、')} 没法求值，作图只认自变量 x`
+        : '在指定定义域内没有取得有效函数值（可能在定义域外，或存在奇点）',
+      expr,
+      points: [],
+      extrema: [],
+      yRange: [-1, 1],
+    }
   }
   // 极值点：相邻差分变号
   const extrema: Array<{ x: number; y: number; kind: 'max' | 'min' }> = []
@@ -309,6 +313,37 @@ export function sampleFunction(latex: string, xMin: number, xMax: number, sample
     } else merged.push(e)
   }
   return { ok: true, expr, points, extrema: merged.slice(0, 40), yRange: [yMin, yMax] }
+}
+
+/** 单条曲线（旧接口，内部仍被导出 / 打印等地方使用） */
+export function sampleFunction(latex: string, xMin: number, xMax: number, samples = 800): FunctionPlotResult {
+  const r = sampleOne(latex, xMin, xMax, samples)
+  return { ok: r.ok, error: r.error, expr: r.expr, points: r.points, extrema: r.extrema, yRange: r.yRange }
+}
+
+/**
+ * 多条曲线：用分号分隔，一次画完。
+ * 单条失败不影响其它几条，失败原因放在 notes 里。
+ */
+export function sampleFunctions(source: string, xMin: number, xMax: number, samples = 900): MultiPlotResult {
+  const sources = splitCurveSources(source)
+  if (!sources.length) {
+    return { ok: false, error: '先写一个函数表达式，例如 \\sin(x) 或 x^2-2', curves: [], notes: [] }
+  }
+  const curves: PlotCurve[] = []
+  const notes: string[] = []
+  sources.forEach((src, idx) => {
+    const r = sampleOne(src, xMin, xMax, samples)
+    if (!r.ok) {
+      notes.push(`「${src}」没有画出来：${r.error ?? '未知原因'}`)
+      return
+    }
+    curves.push({ ...r, source: src, color: curveColor(idx) })
+  })
+  if (!curves.length) {
+    return { ok: false, error: notes[0] ?? '没有可以绘制的曲线', curves: [], notes }
+  }
+  return { ok: true, curves, notes }
 }
 
 /* ------------------------------------------------------------------ *

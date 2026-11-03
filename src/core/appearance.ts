@@ -91,6 +91,54 @@ export function editorFontStack(key: EditorFontKey): string {
   return (EDITOR_FONTS.find((f) => f.key === key) ?? EDITOR_FONTS[0]).stack
 }
 
+/**
+ * 把用户手填的字体名并入字体栈。
+ * 允许写成「霞鹜文楷」「LXGW WenKai」或带引号的 `"LXGW WenKai"`，
+ * 系统里没装时自动落到 fallback，不会出现方框。
+ */
+export function customFontStack(custom: string | undefined, fallback: string): string {
+  const clean = (custom ?? '').trim().replace(/^["']+|["']+$/g, '')
+  if (!clean) return fallback
+  return `'${clean}', ${fallback}`
+}
+
+/** 预览 / 阅读 / 屏幕上的正文最终字体栈 */
+export function resolvePreviewStack(s: Pick<Settings, 'previewFont' | 'previewFontCustom'>): string {
+  return customFontStack(s.previewFontCustom, previewFontStack(s.previewFont))
+}
+
+/** 源码编辑区最终字体栈 */
+export function resolveEditorStack(s: Pick<Settings, 'editorFont' | 'editorFontCustom'>): string {
+  return customFontStack(s.editorFontCustom, editorFontStack(s.editorFont))
+}
+
+/** 导出（HTML / PDF）字体：单独填了就用自己的，否则跟随预览 */
+export function resolveExportStack(
+  s: Pick<Settings, 'previewFont' | 'previewFontCustom' | 'exportFontCustom'>
+): string {
+  return customFontStack(s.exportFontCustom, resolvePreviewStack(s))
+}
+
+/**
+ * 检测系统里到底有没有这个字体。
+ * 原理：同一段文字分别用「目标字体, monospace」与「monospace」量宽度，
+ * 宽度不同说明目标字体真的被用上了（比 document.fonts.check 可靠，后者对未装字体也常返 true）。
+ */
+export function isFontAvailable(name: string): boolean {
+  const clean = name.trim().replace(/^["']+|["']+$/g, '')
+  if (!clean || typeof document === 'undefined') return false
+  const probe = 'mmmmmmmmmmlli1MW@#中文字形'
+  const ctx = document.createElement('canvas').getContext('2d')
+  if (!ctx) return false
+  const measure = (font: string) => {
+    ctx.font = `40px ${font}`
+    return ctx.measureText(probe).width
+  }
+  const baseMono = measure('monospace')
+  const baseSerif = measure('serif')
+  return measure(`'${clean}', monospace`) !== baseMono || measure(`'${clean}', serif`) !== baseSerif
+}
+
 /** 楷体栈：定理正文与证明的「证」字用它，装不到就退到宋体，不会出方框 */
 export const KAI_STACK =
   "'LXGW WenKai', 'Kaiti SC', 'STKaiti', 'KaiTi', 'Source Han Serif SC', 'Noto Serif CJK SC', 'Songti SC', serif"
@@ -99,15 +147,16 @@ export const KAI_STACK =
 export function applyAppearance(s: Settings) {
   if (typeof document === 'undefined') return
   const root = document.documentElement.style
-  root.setProperty('--mf-serif', previewFontStack(s.previewFont))
+  const preview = resolvePreviewStack(s)
+  root.setProperty('--mf-serif', preview)
   root.setProperty('--mf-academic-size', `${s.previewFontSize}px`)
   root.setProperty('--mf-academic-leading', String(s.previewLineHeight))
   root.setProperty('--mf-academic-weight', String(s.previewWeight))
-  root.setProperty('--mf-editor-font', editorFontStack(s.editorFont))
+  root.setProperty('--mf-editor-font', resolveEditorStack(s))
   root.setProperty('--mf-editor-size', `${s.editorFontSize}px`)
   root.setProperty('--mf-kai', KAI_STACK)
   // 定理/证明正文：默认楷体（中文讲义惯例），也可以跟着正文字体走
-  root.setProperty('--mf-thm-body-font', s.thmBodyKai ? KAI_STACK : previewFontStack(s.previewFont))
+  root.setProperty('--mf-thm-body-font', s.thmBodyKai ? KAI_STACK : preview)
   // 这两项靠属性选择器切换样式，比逐个改 class 稳
   document.documentElement.dataset.mathStyle = s.mathStyle
   document.documentElement.dataset.thmStyle = s.thmStyle

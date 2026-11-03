@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { CircleAlert, FileText, X } from 'lucide-react'
+import { CircleAlert, FileText, Save, X } from 'lucide-react'
 import { useEditorStore } from '../../store/useEditorStore'
 
 /**
@@ -46,10 +46,16 @@ export default function FileTabs() {
 
   return (
     <div className="mf-no-print flex h-9 shrink-0 items-stretch border-b border-ink-200 bg-ink-50/70">
-      <div ref={scrollRef} className="flex min-w-0 flex-1 items-stretch overflow-x-auto">
+      {/*
+        等分标签：每个标签 flex-1 + basis-0 + min-w-0，宽度恒为栏宽的 1/n。
+        图标与关闭按钮都不参与宽度计算（关闭按钮绝对定位、只在 hover 时显隐），
+        所以标签切换时既不会左右窜动，图标也不会被挤小。
+      */}
+      <div ref={scrollRef} className="flex min-w-0 flex-1 items-stretch overflow-hidden">
         {tabs.map((d) => {
           const isActive = d.id === activeDocId
           const st = fileState[d.id] ?? 'clean'
+          const n = tabs.length
           return (
             <div
               key={d.id}
@@ -68,15 +74,16 @@ export default function FileTabs() {
                 closeOtherTabs(d.id)
               }}
               title={d.filePath ?? d.title}
-              className={`group relative flex max-w-[220px] shrink-0 cursor-pointer items-center gap-1.5 border-r border-ink-200 px-2.5 text-[12px] transition ${
+              style={{ flexBasis: n > 0 ? `${100 / n}%` : undefined }}
+              className={`group relative flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 border-r border-ink-200 pl-2.5 pr-6 text-[12px] transition ${
                 isActive
                   ? 'bg-white text-ink-800'
                   : 'bg-transparent text-ink-500 hover:bg-white/60 hover:text-ink-700'
               }`}
             >
               {isActive && <span className="absolute inset-x-0 top-0 h-[2px] bg-accent-500" />}
-              <FileText size={12} className={isActive ? 'text-accent-600' : 'text-ink-300'} />
-              <span className="truncate">{d.title}</span>
+              <FileText size={12} className={`shrink-0 ${isActive ? 'text-accent-600' : 'text-ink-300'}`} />
+              <span className="min-w-0 flex-1 truncate">{d.title}</span>
               <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${STATE_COLOR[st] ?? 'bg-transparent'}`} />
               <button
                 onClick={(e) => {
@@ -84,7 +91,7 @@ export default function FileTabs() {
                   closeTab(d.id)
                 }}
                 disabled={tabs.length <= 1}
-                className="ml-0.5 hidden shrink-0 rounded p-0.5 text-ink-300 hover:bg-ink-100 hover:text-rose-500 group-hover:block disabled:hidden"
+                className="absolute right-1 top-1/2 -translate-y-1/2 rounded p-0.5 text-ink-300 opacity-0 transition hover:bg-ink-100 hover:text-rose-500 group-hover:opacity-100 disabled:hidden"
                 title="关闭标签（中键也可关闭，右键关闭其他）"
               >
                 <X size={11} />
@@ -106,6 +113,15 @@ export default function FileTabs() {
         )}
         {mode === 'local' && active?.filePath && (
           <span className="max-w-[280px] truncate font-mono text-[10.5px] text-ink-300">{active.filePath}</span>
+        )}
+        {mode === 'local' && active?.filePath && state === 'dirty' && (
+          <button
+            onClick={() => active && saveDoc(active.id)}
+            className="flex shrink-0 items-center gap-1 rounded bg-amber-50 px-1.5 py-0.5 text-[10.5px] font-medium text-amber-700 ring-1 ring-amber-200 transition hover:bg-amber-100"
+            title="有未保存的改动，点击写盘（Ctrl+S）"
+          >
+            <Save size={10} /> 保存
+          </button>
         )}
         {mode === 'sandbox' && <span className="text-[10.5px] text-ink-300">浏览器内文档</span>}
       </div>
