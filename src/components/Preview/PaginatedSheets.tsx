@@ -94,11 +94,6 @@ export default function PaginatedSheets({ html, signature, onPages, pageNumbers 
 
   return (
     <>
-      {/* 量尺：不参与视觉，但必须真实存在于文档里才能拿到尺寸 */}
-      <div ref={measureRef} className="mf-sheet-measure" aria-hidden="true">
-        <div className="mf-academic" dangerouslySetInnerHTML={{ __html: html }} />
-      </div>
-
       {(pages ?? [[]]).map((blocks, i) => (
         <section className="mf-sheet" key={i} data-sheet={i + 1}>
           <div className="mf-academic" dangerouslySetInnerHTML={{ __html: blocks.join('\n') }} />
@@ -109,6 +104,13 @@ export default function PaginatedSheets({ html, signature, onPages, pageNumbers 
           )}
         </section>
       ))}
+
+      {/* 量尺放在最后：不参与视觉，但必须真实存在于文档里才能拿到尺寸。
+          放末尾是为了让页面上「真正显示」的那一份排在前面，
+          锚点跳转（#eq-xxx）才不会落到这份隐藏的副本上。 */}
+      <div ref={measureRef} className="mf-sheet-measure" aria-hidden="true">
+        <div className="mf-academic" dangerouslySetInnerHTML={{ __html: html }} />
+      </div>
     </>
   )
 }

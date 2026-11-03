@@ -154,7 +154,9 @@ export default function AcademicPreview({
     if (!root) return
     const scrollToAnchor = (anchor: string) => {
       if (!anchor) return
-      const el = root.querySelector(`#${CSS.escape(anchor)}`) as HTMLElement | null
+      // 阅读模式的「量尺」里也有一份同样的 id，优先取真正显示的那一份
+      const hits = Array.from(root.querySelectorAll(`#${CSS.escape(anchor)}`)) as HTMLElement[]
+      const el = hits.find((x) => !x.closest('.mf-sheet-measure')) ?? hits[0]
       if (!el) return
       el.scrollIntoView({ behavior: 'smooth', block: 'center' })
       el.classList.add('mf-flash')
