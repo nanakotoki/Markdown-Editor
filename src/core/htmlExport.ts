@@ -2,7 +2,8 @@ import { renderMarkdown, type RenderResult } from './renderMarkdown'
 import { getInlinedKatexCss } from './clipboardExport'
 import { ACADEMIC_CSS } from './academicCss'
 import type { MacroMap } from './katexSafeRender'
-import type { BibEntry, Settings } from '../store/useEditorStore'
+import { DEFAULT_SETTINGS, type BibEntry, type Settings } from '../store/useEditorStore'
+import { KAI_STACK, previewFontStack } from './appearance'
 
 /**
  * ============================================================================
@@ -27,29 +28,27 @@ function esc(s: string) {
 }
 
 export async function buildStandaloneHtml(markdown: string, opts: HtmlExportOptions = {}): Promise<{ html: string; result: RenderResult }> {
-  const settings: Settings = opts.settings ?? {
-    autoNumberEquations: true,
-    citationStyle: 'numeric',
-    texTemplate: 'ctexart',
-    showLineNumbers: true,
-    previewFont: 'serif',
-    previewFontSize: 16.5,
-    previewLineHeight: 1.9,
-    previewWeight: 400,
-    editorFont: 'serif',
-    editorFontSize: 15,
-    syncScroll: true,
-  }
+  const settings: Settings = { ...DEFAULT_SETTINGS, ...(opts.settings ?? {}) }
   const result = renderMarkdown(markdown, {
     macros: opts.macros ?? {},
     bib: opts.bib ?? [],
     autoNumber: settings.autoNumberEquations,
     citationStyle: settings.citationStyle,
+    numbering: { thm: settings.thmNumbering, eq: settings.eqNumbering, eqTag: settings.eqTagStyle },
+    qed: settings.qedSymbol,
   })
   const katex = await getInlinedKatexCss()
   const date = new Date().toLocaleDateString('zh-CN')
+  /** 把外观设置写成内联变量：导出的 HTML 与应用里看到的排版一致 */
+  const bodyStyle = [
+    `--mf-serif:${previewFontStack(settings.previewFont)}`,
+    `--mf-thm-body-font:${settings.thmBodyKai ? KAI_STACK : previewFontStack(settings.previewFont)}`,
+    `font-size:${settings.previewFontSize}px`,
+    `line-height:${settings.previewLineHeight}`,
+    `font-weight:${settings.previewWeight}`,
+  ].join(';')
   const html = `<!doctype html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-thm-style="${esc(settings.thmStyle)}" data-math-style="${esc(settings.mathStyle)}">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -60,7 +59,7 @@ export async function buildStandaloneHtml(markdown: string, opts: HtmlExportOpti
 <body>
 <div class="mf-page">
   <div class="mf-meta"><span>MathFlow 导出</span><span>${esc(opts.author || '')}</span><span>${date}</span></div>
-  <div class="mf-academic">${result.html}</div>
+  <div class="mf-academic" style="${bodyStyle}">${result.html}</div>
 </div>
 <div class="mf-print-bar">
   <button onclick="window.print()" class="primary">打印 / 导出 PDF</button>

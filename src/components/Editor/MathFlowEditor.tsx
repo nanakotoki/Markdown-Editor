@@ -12,7 +12,7 @@ import { markdownPreviewPlugin, markdownSmartInput } from './cmMarkdownPreview'
 import { refCompletion } from './cmRefCompletion'
 import FloatingMathHUD from './FloatingMathHUD'
 import { editorBridge } from '../../store/editorBridge'
-import { renderMathSafely, type MacroMap } from '../../core/katexSafeRender'
+import { renderMathSafely, mathRangeAt, type MacroMap } from '../../core/katexSafeRender'
 import type { RefEntry } from '../../core/renderMarkdown'
 import type { BibEntry } from '../../store/useEditorStore'
 import { useEditorStore } from '../../store/useEditorStore'
@@ -121,6 +121,12 @@ export default function MathFlowEditor({
   const showToast = useEditorStore((s) => s.showToast)
   const addFavorite = useEditorStore((s) => s.addFavorite)
 
+  /** 编号规则（公式按节 / 写法）——编辑器里的行间公式要和右侧预览显示同一个编号 */
+  const getNumbering = useCallback(() => {
+    const st = useEditorStore.getState().settings
+    return { thm: st.thmNumbering, eq: st.eqNumbering, eqTag: st.eqTagStyle } as const
+  }, [])
+
   /** 折叠 / 展开公式工作台，并记住这次的选择 */
   const toggleHudCollapsed = useCallback(() => {
     setHudCollapsed((v) => {
@@ -206,7 +212,7 @@ export default function MathFlowEditor({
             },
           },
         ]),
-        mathCompartment.of(plain ? [] : [...mathRenderPlugin(() => getMacros()), markdownPreviewPlugin(), markdownSmartInput()]),
+        mathCompartment.of(plain ? [] : [...mathRenderPlugin(() => getMacros(), getNumbering), markdownPreviewPlugin(getNumbering), markdownSmartInput()]),
         snippetExtensions({
           onAskAI: () => {
             const view = viewRef.current
@@ -229,9 +235,18 @@ export default function MathFlowEditor({
             const target = e.target as HTMLElement | null
             const widget = target?.closest('.mf-cm-inline, .mf-cm-block') as HTMLElement | null
             if (!widget) return false
+            // 点哪儿就把光标放到源码里大致对应的位置：按横向比例映射到 LaTeX 字符
+            const doc = view.state.doc.toString()
             const pos = view.posAtDOM(widget)
-            const inside = Math.min(view.state.doc.length, pos + 1)
-            view.dispatch({ selection: { anchor: inside }, scrollIntoView: true })
+            const range = mathRangeAt(doc, Math.min(pos + 1, doc.length))
+            let anchor = Math.min(doc.length, pos + 1)
+            if (range) {
+              const rect = widget.getBoundingClientRect()
+              const frac = rect.width > 0 ? Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width)) : 0
+              const span = Math.max(0, range.to - range.from - 4)
+              anchor = Math.min(range.to - 1, range.from + 2 + Math.round(frac * span))
+            }
+            view.dispatch({ selection: { anchor }, scrollIntoView: true })
             view.focus()
             e.preventDefault()
             return true
@@ -392,16 +407,34 @@ export default function MathFlowEditor({
     if (!view) return
     view.dispatch({
       effects: mathCompartment.reconfigure(
-        plain ? [] : [...mathRenderPlugin(() => getMacros()), markdownPreviewPlugin(), markdownSmartInput()]
+        plain ? [] : [...mathRenderPlugin(() => getMacros(), getNumbering), markdownPreviewPlugin(getNumbering), markdownSmartInput()]
       ),
     })
-  }, [plain, mathCompartment, getMacros])
+  }, [plain, mathCompartment, getMacros, getNumbering])
 
   // 宏变化后强制刷新公式渲染
   const macrosKey = JSON.stringify(getMacros())
   useEffect(() => {
     viewRef.current?.dispatch({ effects: refreshMathEffect.of(null) })
   }, [macrosKey])
+
+  // 编号规则变了（按节 / 写法）也要重画公式编号
+  const numberingKey = useEditorStore((s) => `${s.settings.eqNumbering}|${s.settings.eqTagStyle}`)
+  useEffect(() => {
+    viewRef.current?.dispatch({ effects: refreshMathEffect.of(null) })
+  }, [numberingKey])
+
+  /**
+   * 工作台展开/收起会挤压编辑区高度，光标可能被顶到可视区之外。
+   * 这里每次都把光标「轻轻」滚回视野内，保证正在敲的公式不会被面板挡住。
+   */
+  useEffect(() => {
+    const v = viewRef.current
+    if (!v || !hud) return
+    const head = v.state.selection.main.head
+    v.dispatch({ effects: EditorView.scrollIntoView(head, { y: 'nearest', yMargin: 36 }) })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hud?.from, hud?.display, hudCollapsed])
 
   useEffect(() => () => flush(), [])
 

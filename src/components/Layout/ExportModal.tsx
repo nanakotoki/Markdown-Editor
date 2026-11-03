@@ -293,7 +293,10 @@ export default function ExportModal({ open, onClose }: { open: boolean; onClose:
           <div className="rounded-lg bg-ink-50 px-3 py-2 text-[11px] leading-relaxed text-ink-500">
             HTML 采用与预览完全一致的渲染管线（定理编号、三线表、算法块、交叉引用）。
             <code className="mx-1 rounded bg-white px-1">@media print</code>
-            已针对 A4 调校：页边距 20mm、<code className="rounded bg-white px-1">break-inside: avoid</code> 避免公式/定理框被跨页截断。
+            已针对 A4 调校：页边距 20mm、行间公式与正文同字号、
+            <code className="rounded bg-white px-1">break-inside: avoid</code> 避免公式/定理框被跨页截断。
+            想控制换页位置，在源码里单独写一行 <code className="mx-1 rounded bg-white px-1">\newpage</code>；
+            想先在应用里确认分页，切到顶部「阅读」即可看到与打印一致的 A4 页面。
           </div>
         </div>
       )}

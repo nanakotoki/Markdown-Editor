@@ -46,8 +46,8 @@ export const MANUAL_SECTIONS: ManualSection[] = [
     summary: '五分钟能上手的最小集合：写、看、存、导出。',
     entries: [
       {
-        title: '三种视图怎么选',
-        note: '顶部中间的「内联混合 / 左右分屏 / 纯源码」三选一，选择会被记住。刚上手用内联混合；要精修排版用左右分屏（左边是原样源码，右边是排版结果）；大段粘贴或核对符号用纯源码。',
+        title: '四种视图怎么选',
+        note: '顶部中间的「内联混合 / 左右分屏 / 纯源码 / 阅读」四选一，选择会被记住。刚上手用内联混合；要精修排版用左右分屏（左边是原样源码，右边是排版结果）；大段粘贴或核对符号用纯源码；想确认「打印出来是什么样」用阅读模式——它按 A4 纸面分页，看到的换页位置就是 PDF 的换页位置。',
         tag: '必读',
       },
       {
@@ -71,6 +71,13 @@ export const MANUAL_SECTIONS: ManualSection[] = [
         syntax: 'Ctrl + O',
         note: '选一个已有的论文目录，之后会记住。文件和子目录会被原样读取，不会改动你的目录结构。',
         tag: '快捷键',
+      },
+      {
+        title: '阅读模式 · 分页预览',
+        syntax: '\\newpage',
+        note: '顶部「阅读」按 A4 纸面排版，每页底部有页码，虚线的位置就是分页处。想强制换页，在源码里单独一行写 \\newpage（也认 \\pagebreak、<!-- pagebreak -->、::: pagebreak）；不写也会按内容自动分页，定理框、公式、表格不会被切开。阅读区右上角的「打印 / 存为 PDF」按当前分页打印，打出来和屏幕上看到的一样。',
+        block: true,
+        tag: '排版',
       },
       {
         title: '随时叫出这本手册',
@@ -216,6 +223,12 @@ export const MANUAL_SECTIONS: ManualSection[] = [
         block: true,
       },
       {
+        title: '公式编号的写法',
+        syntax: '(1)   或   1-1   或   1.1',
+        note: '「排印细节 → 公式编号」里选：连续编号是 (1)(2)(3)；按节编号配合三种写法可以做成 (1.1)、1-1、1.1。编号本身可以点击，会定位到那条公式；正文里写 @eq:标签 或「式 (1.1)」也能跳回来。',
+        tag: '引用',
+      },
+      {
         title: '多行对齐',
         syntax: j('$$', '\\begin{aligned}', 'f(x) &= (x+1)^2 \\\\', '&= x^2 + 2x + 1', '\\end{aligned}', '$$'),
         note: '用 `&` 对齐等号、`\\\\` 换行。KaTeX 不支持 `align` 环境，必须写 `aligned`。',
@@ -277,6 +290,17 @@ export const MANUAL_SECTIONS: ManualSection[] = [
         block: true,
       },
       {
+        title: '容器外观与证毕符号',
+        note: '「工具 → 字体与外观 → 排印细节」里可以切换四套容器：经典（左侧色条）、色块（类似 beamer 的圆角块）、方框（整圈边框）、纯文（标题并进正文）。证明的结尾符号可选 ∎ □ ■ ▪ Q.E.D. 或自己填，符号永远落在框内；不想要就选「不要」。',
+        tag: '外观',
+      },
+      {
+        title: '定理编号：定义 1.1 还是定义 1',
+        syntax: '定义 1.1',
+        note: '默认按节编号：文档只有一个 H1 时，H1 当标题、按 H2 分节；有两个以上 H1 时按 H1 分节。想要全文连续编号，在「排印细节 → 定理编号」里切一下即可。LaTeX 导出用 \\newtheorem{...}[section]，编号与预览一致。',
+        tag: '编号',
+      },
+      {
         title: '伪代码算法块',
         syntax: j(F + 'algorithm [二分查找]{#alg:binary}', '输入: 有序数组 A，目标值 t', '输出: 下标或 -1', 'While low <= high', '  mid <- (low + high) / 2', '  If A[mid] = t', '    Return mid', '  EndIf', 'EndWhile', 'Return -1', F),
         note: '用 ```algorithm 开头的代码块，关键字 `If / Else / For / While / Return / Function / EndIf …` 会排版成伪代码。',
@@ -295,6 +319,19 @@ export const MANUAL_SECTIONS: ManualSection[] = [
         note: '支持的前缀：eq 式、thm 定理、lem 引理、def 定义、prop 命题、cor 推论、exa 例题、alg 算法、sec 节、fig 图、tab 表。引用文字会自动变成可点击的「定理 1.2」。',
         block: true,
         tag: '常用',
+      },
+      {
+        title: '直接说「由定理 1.1」也会自动变成链接',
+        syntax: '由定理 1.1 可知，结合式 (2) 即得结论。',
+        note: '系统会按当前编号做匹配：只要这句里的「定理 1.1」「定义 1.2」「式 (2)」确实存在，就会自动加上可点击的链接与悬停预览。编号改了（比如从按节换成连续），链接会跟着变，不用手改正文。对不上编号的文字保持原样。',
+        block: true,
+        tag: '省事',
+      },
+      {
+        title: 'LaTeX 写法 \\ref{} / \\eqref{}',
+        syntax: '由 \\ref{eq:lagrange} 与 \\eqref{thm:lagrange} 可得……',
+        note: '和 @eq:lagrange 等价，习惯写 LaTeX 的可以直接用；大括号里写带前缀的标签即可。',
+        block: true,
       },
       {
         title: '文献引用',

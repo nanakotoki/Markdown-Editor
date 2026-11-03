@@ -67,10 +67,27 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKey)
   }, [])
 
+  /**
+   * Ctrl+P：直接打印会把工具栏、侧栏一起印出来。
+   * 这里改成走「导出 → 可打印的 HTML」，在新窗口里 Ctrl+P 才是干净的 A4 版面。
+   */
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const mod = e.ctrlKey || e.metaKey
+      if (!mod || e.shiftKey || e.altKey || e.key.toLowerCase() !== 'p') return
+      e.preventDefault()
+      const s = useEditorStore.getState()
+      s.openModal('export')
+      s.showToast('打印请走这里：导出可打印的 HTML，再在新窗口按 Ctrl+P', 'info')
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const v = params.get('view')
-    if (v === 'split' || v === 'source' || v === 'hybrid') setViewMode(v)
+    if (v === 'split' || v === 'source' || v === 'hybrid' || v === 'read') setViewMode(v)
     if (mode !== 'local') {
       const d = params.get('doc')
       if (d) {
@@ -325,6 +342,20 @@ export default function App() {
     />
   )
 
+  /** 阅读模式：整页只放排版结果，按 A4 分页 */
+  const readPane = (
+    <AcademicPreview
+      content={deferred}
+      macros={macroMap}
+      bib={bibForRender}
+      settings={settings}
+      extRefs={extRefs}
+      jumpable={false}
+      mode="read"
+      className="w-full flex-1"
+    />
+  )
+
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-[#f3f5f8]">
       <HeaderToolbar
@@ -344,6 +375,10 @@ export default function App() {
               <div ref={previewRef} className="relative w-1/2 overflow-auto bg-[#fbfcfd]">
                 {previewPane}
               </div>
+            </div>
+          ) : viewMode === 'read' ? (
+            <div ref={previewRef} className="relative flex h-full w-full overflow-hidden">
+              {readPane}
             </div>
           ) : (
             <div ref={previewRef} className="relative flex w-full justify-center overflow-auto">

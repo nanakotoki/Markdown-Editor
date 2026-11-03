@@ -21,6 +21,7 @@ import {
   PenTool,
   Plus,
   Quote,
+  Scissors,
   Settings2,
   Sigma,
   Sparkles,
@@ -167,6 +168,7 @@ export default function HeaderToolbar({
           { value: 'hybrid', label: '内联混合', icon: <AlignLeft size={12} /> },
           { value: 'split', label: '左右分屏', icon: <Columns2 size={12} /> },
           { value: 'source', label: '纯源码', icon: <Braces size={12} /> },
+          { value: 'read', label: '阅读', icon: <BookOpen size={12} /> },
         ]}
       />
 
@@ -202,6 +204,7 @@ export default function HeaderToolbar({
           { label: '矩阵构造器', icon: <Grid3x3 size={13} />, onClick: () => onRequestBuilder('matrix') },
           { label: '真值表生成器', icon: <FlaskConical size={13} />, onClick: () => openModal('truth') },
           { label: '文献引用 [@key]', icon: <BookMarked size={13} />, onClick: () => insert('[@', 0) },
+          { label: '手动分页 \\newpage', icon: <Scissors size={13} />, onClick: () => insert('\n\\newpage\n\n') },
         ]}
       />
 

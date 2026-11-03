@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { renderMarkdown, buildPreviewMap, type RefEntry, type RenderResult } from '../../core/renderMarkdown'
 import type { MacroMap } from '../../core/katexSafeRender'
 import { useEditorStore, type BibEntry, type Settings } from '../../store/useEditorStore'
+import PaginatedSheets from './PaginatedSheets'
 
 /**
  * ============================================================================
@@ -27,6 +28,8 @@ export interface AcademicPreviewProps {
   jumpable?: boolean
   /** 把内部滚动容器交给外层，用于滚动联动 */
   scrollElementRef?: React.MutableRefObject<HTMLDivElement | null>
+  /** read = 阅读模式：照 A4 纸面分页，看到的就是导出 PDF 的样子 */
+  mode?: 'preview' | 'read'
 }
 
 interface HoverCard {
@@ -50,9 +53,11 @@ export default function AcademicPreview({
   onJumpToSource,
   jumpable = false,
   scrollElementRef,
+  mode = 'preview',
 }: AcademicPreviewProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const [hover, setHover] = useState<HoverCard | null>(null)
+  const [pageTotal, setPageTotal] = useState(0)
 
   /** 把内部滚动容器同时交给外层（滚动联动要用） */
   const attachScroll = (el: HTMLDivElement | null) => {
@@ -74,9 +79,34 @@ export default function AcademicPreview({
         autoNumber: settings.autoNumberEquations,
         citationStyle: settings.citationStyle,
         extRefs,
+        numbering: { thm: settings.thmNumbering, eq: settings.eqNumbering, eqTag: settings.eqTagStyle },
+        qed: settings.qedSymbol,
       }),
-    [content, macros, bib, settings.autoNumberEquations, settings.citationStyle, extRefs]
+    [
+      content,
+      macros,
+      bib,
+      settings.autoNumberEquations,
+      settings.citationStyle,
+      settings.thmNumbering,
+      settings.eqNumbering,
+      settings.eqTagStyle,
+      settings.qedSymbol,
+      extRefs,
+    ]
   )
+
+  /** 排版参数指纹：字体/字号/容器样式变了要重新分页 */
+  const layoutKey = [
+    settings.previewFont,
+    settings.previewFontSize,
+    settings.previewLineHeight,
+    settings.previewWeight,
+    settings.thmStyle,
+    settings.thmBodyKai,
+    settings.mathStyle,
+    settings.qedSymbol,
+  ].join('|')
 
   const previews = useMemo(() => buildPreviewMap(result), [result])
 
@@ -175,7 +205,12 @@ export default function AcademicPreview({
         return
       }
 
-      // 1) 交叉引用 / 文献引用
+      // 1) 交叉引用 / 文献引用 / 公式编号
+      if (anchor.classList.contains('mf-eq-tag')) {
+        e.preventDefault()
+        scrollToAnchor((anchor.getAttribute('href') ?? '').replace(/^#/, ''))
+        return
+      }
       if (anchor.classList.contains('mf-ref') || anchor.classList.contains('mf-cite')) {
         e.preventDefault()
         const file = anchor.getAttribute('data-mf-file')
@@ -207,13 +242,53 @@ export default function AcademicPreview({
     return () => root.removeEventListener('click', onClick)
   }, [])
 
+  /**
+   * 打印：把已经分好页的 A4 纸面复制到一个只供打印的容器里，
+   * 原界面整体隐藏，这样打出来就是干净的论文版面，不会把工具栏、侧栏一起印上去。
+   */
+  const printAsPdf = () => {
+    const holder = document.createElement('div')
+    holder.className = 'mf-print-holder'
+    document.querySelectorAll('.mf-sheet').forEach((sheet) => holder.appendChild(sheet.cloneNode(true)))
+    if (!holder.childElementCount) return
+    document.body.appendChild(holder)
+    document.body.classList.add('mf-printing')
+    const cleanup = () => {
+      document.body.classList.remove('mf-printing')
+      holder.remove()
+    }
+    window.addEventListener('afterprint', cleanup, { once: true })
+    window.print()
+    setTimeout(cleanup, 120)
+  }
+
   return (
     <div
       ref={attachScroll}
       data-jumpable={jumpable ? 'true' : 'false'}
-      className={`mf-preview-scroll relative h-full overflow-auto ${className ?? ''}`}
+      className={`mf-preview-scroll relative h-full overflow-auto ${mode === 'read' ? 'mf-read-scroll' : ''} ${className ?? ''}`}
     >
-      <div className="mf-academic mx-auto max-w-[860px] px-10 pb-32 pt-8" dangerouslySetInnerHTML={{ __html: result.html }} />
+      {mode === 'read' ? (
+        <>
+          {settings.pageGuides && (
+            <div className="mf-read-toolbar">
+              <span>A4 · 共 {pageTotal || 1} 页</span>
+              <span className="text-ink-300">·</span>
+              <span>
+                虚线处为手动分页（源码里写 <code className="rounded bg-white/70 px-1 py-0.5 font-mono text-[11px]">{'\\newpage'}</code>）
+              </span>
+              <button className="mf-read-print" onClick={printAsPdf} title="按当前分页打印，或另存为 PDF">
+                打印 / 存为 PDF
+              </button>
+            </div>
+          )}
+          <div className="pb-10 pt-4">
+            <PaginatedSheets html={result.html} signature={layoutKey} onPages={setPageTotal} />
+          </div>
+        </>
+      ) : (
+        <div className="mf-academic mx-auto max-w-[860px] px-10 pb-32 pt-8" dangerouslySetInnerHTML={{ __html: result.html }} />
+      )}
       {hover && (
         <div
           className="pointer-events-none absolute z-30 w-[380px] rounded-xl border border-ink-200 bg-white p-3 shadow-panel"

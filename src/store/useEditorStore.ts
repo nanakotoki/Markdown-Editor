@@ -27,7 +27,16 @@ import {
   type WorkspaceInfo,
 } from '../core/workspaceApi'
 
-export type ViewMode = 'hybrid' | 'split' | 'source'
+export type ViewMode = 'hybrid' | 'split' | 'source' | 'read'
+
+/** 定理/证明容器外观：经典左边线 / Beamer 圆角块 / 全框 / 极简行内标题 */
+export type ThmStyle = 'classic' | 'beamer' | 'boxed' | 'plain'
+
+/** 数学字形：默认 Computer Modern / 饱满 / 粗壮 */
+export type MathStyle = 'cm' | 'soft' | 'bold'
+
+/** 公式编号写法：(1-1) / 1-1 / 1.1 */
+export type EqTagStyle = 'paren' | 'dash' | 'dot'
 export type ModalName =
   | 'matrix'
   | 'truth'
@@ -102,6 +111,22 @@ export interface Settings {
   editorFontSize: number
   /* ---- 分屏：滚动联动开关 ---- */
   syncScroll: boolean
+  /* ---- 编号：定理按节（定义 1.1）还是全文连续（定义 1）---- */
+  thmNumbering: 'section' | 'global'
+  /* ---- 编号：公式按节还是全文连续 ---- */
+  eqNumbering: 'global' | 'section'
+  /* ---- 公式编号的写法：(1-1) / 1-1 / 1.1 ---- */
+  eqTagStyle: EqTagStyle
+  /* ---- 定理容器外观 ---- */
+  thmStyle: ThmStyle
+  /* ---- 证毕符号，空字符串表示不加 ---- */
+  qedSymbol: string
+  /* ---- 数学字形（锐利 / 饱满 / 粗壮）---- */
+  mathStyle: MathStyle
+  /* ---- 定理正文用楷体（中文讲义惯例）---- */
+  thmBodyKai: boolean
+  /* ---- 阅读模式：显示分页参考线与页码 ---- */
+  pageGuides: boolean
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -116,6 +141,14 @@ export const DEFAULT_SETTINGS: Settings = {
   editorFont: 'serif',
   editorFontSize: 15,
   syncScroll: true,
+  thmNumbering: 'section',
+  eqNumbering: 'global',
+  eqTagStyle: 'paren',
+  thmStyle: 'classic',
+  qedSymbol: '∎',
+  mathStyle: 'soft',
+  thmBodyKai: true,
+  pageGuides: true,
 }
 
 const SETTINGS_KEY = 'mf-settings-v1'
@@ -132,6 +165,15 @@ export function loadSettings(): Settings {
     out.previewFontSize = clampNum(out.previewFontSize, 13, 24, 16.5)
     out.previewLineHeight = clampNum(out.previewLineHeight, 1.4, 2.6, 1.9)
     out.editorFontSize = clampNum(out.editorFontSize, 11, 20, 15)
+    // 新增字段的枚举值也要兜底：老版本存下来的 settings 里没有这些键
+    if (out.thmNumbering !== 'section' && out.thmNumbering !== 'global') out.thmNumbering = 'section'
+    if (out.eqNumbering !== 'section' && out.eqNumbering !== 'global') out.eqNumbering = 'global'
+    if (!['paren', 'dash', 'dot'].includes(out.eqTagStyle)) out.eqTagStyle = 'paren'
+    if (!['classic', 'beamer', 'boxed', 'plain'].includes(out.thmStyle)) out.thmStyle = 'classic'
+    if (!['cm', 'soft', 'bold'].includes(out.mathStyle)) out.mathStyle = 'soft'
+    if (typeof out.qedSymbol !== 'string') out.qedSymbol = '∎'
+    if (typeof out.pageGuides !== 'boolean') out.pageGuides = true
+    if (typeof out.thmBodyKai !== 'boolean') out.thmBodyKai = true
     return out
   } catch {
     return { ...DEFAULT_SETTINGS }
@@ -142,6 +184,44 @@ function clampNum(v: unknown, min: number, max: number, fallback: number): numbe
   const n = typeof v === 'number' ? v : Number(v)
   if (!Number.isFinite(n)) return fallback
   return Math.min(max, Math.max(min, n))
+}
+
+/**
+ * 新建文档的起始内容。
+ * 旧版这里放的是 `E = mc^2`——看起来像一句英文而不是公式，
+ * 现在换成带编号、可引用的真公式，顺手把「行内 / 块级 / 引用」三件事演示清楚。
+ */
+export function newDocTemplate(title: string): string {
+  return [
+    `# ${title}`,
+    '',
+    '从这里开始写作。行内公式直接嵌在句子里，例如 Euler 恒等式 $e^{i\\pi}+1=0$；',
+    '需要单独成行、参与编号的公式写成块级：',
+    '',
+    '$$',
+    '\\int_{0}^{1} x^{2}\\,\\mathrm{d}x=\\frac{1}{3}',
+    '\\label{eq:demo}',
+    '$$',
+    '',
+    '想引用这条式子，在正文里写 `@eq:demo` 或 `\\ref{eq:demo}`，会显示成可点击的「式 1-1」。',
+    '',
+    '::: theorem [微积分基本定理]{#thm:demo}',
+    '若 $f$ 在 $[a,b]$ 上连续，$F$ 是它的一个原函数，则',
+    '',
+    '$$',
+    '\\int_{a}^{b} f(x)\\,\\mathrm{d}x=F(b)-F(a).',
+    '\\label{eq:newton}',
+    '$$',
+    ':::',
+    '',
+    '::: proof',
+    '把 $[a,b]$ 等分后取 Riemann 和，由 @eq:newton 与一致连续性令分割加细即得。',
+    ':::',
+    '',
+    '定理、引理、定义、推论、例题、注都用 `:::` 包起来，标题会自动编号成「定理 1.1」；',
+    '正文里直接写「由定理 1.1」也会变成可点击的链接。',
+    '',
+  ].join('\n')
 }
 
 const now = Date.now()
@@ -533,7 +613,7 @@ export const useEditorStore = create<EditorState>()(
           target = dir ? `${dir}/${fileName.replace(/\.md$/i, '')}-${n}.md` : `${fileName.replace(/\.md$/i, '')}-${n}.md`
         }
         try {
-          await apiCreateFile(target, `# ${base.replace(/\.md$/i, '')}\n\n从这里开始写作。\n\n$$\nE = mc^2\n$$\n`)
+          await apiCreateFile(target, newDocTemplate(base.replace(/\.md$/i, '')))
           await get().refreshTree()
           await get().openFile(target)
           void get().refreshIndex()
@@ -673,7 +753,7 @@ export const useEditorStore = create<EditorState>()(
         const doc: DocNode = {
           id,
           title: title || `未命名文档 ${get().docs.length + 1}`,
-          content: content ?? '# 新文档\n\n从这里开始用 Markdown 与 LaTeX 混合写作。\n\n$$\nE = mc^2\n$$\n',
+          content: content ?? newDocTemplate('新文档'),
           createdAt: Date.now(),
           updatedAt: Date.now(),
         }
@@ -746,6 +826,10 @@ export const useEditorStore = create<EditorState>()(
             previewWeight: DEFAULT_SETTINGS.previewWeight,
             editorFont: DEFAULT_SETTINGS.editorFont,
             editorFontSize: DEFAULT_SETTINGS.editorFontSize,
+            mathStyle: DEFAULT_SETTINGS.mathStyle,
+            thmBodyKai: DEFAULT_SETTINGS.thmBodyKai,
+            thmStyle: DEFAULT_SETTINGS.thmStyle,
+            qedSymbol: DEFAULT_SETTINGS.qedSymbol,
           }
           try {
             localStorage.setItem(SETTINGS_KEY, JSON.stringify(next))

@@ -178,8 +178,12 @@ function blockToLatex(node: any, ctx: Ctx, indent = ''): string {
           return `\\subparagraph{${title}}\n${label}`
       }
     }
-    case 'paragraph':
+    case 'paragraph': {
+      // 手动分页：源码里单写一行的 \newpage 原样带到 .tex 里
+      const plain = (node.children ?? []).map((c: any) => String(c.value ?? '')).join('').trim()
+      if (/^\\(newpage|pagebreak|clearpage)$/i.test(plain)) return '\\newpage'
       return inlineToLatex(node.children, ctx)
+    }
     case 'blockquote':
       return `\\begin{quote}\n${blocksToLatex(node.children, ctx)}\n\\end{quote}`
     case 'list': {
@@ -222,6 +226,7 @@ function blockToLatex(node: any, ctx: Ctx, indent = ''): string {
 }
 
 function containerToLatex(node: any, ctx: Ctx): string {
+  if (node.name === 'pagebreak' || node.name === 'newpage' || node.name === 'clearpage') return '\\newpage'
   const env = THM_ENV[node.name]
   const id: string | undefined = node.attributes?.id
   const children = [...(node.children ?? [])]

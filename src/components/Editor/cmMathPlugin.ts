@@ -1,6 +1,7 @@
 import { Decoration, EditorView, WidgetType, type DecorationSet } from '@codemirror/view'
 import { EditorState, RangeSetBuilder, StateEffect, StateField } from '@codemirror/state'
 import { renderMathSafely, scanMath, type MacroMap, type MathRange } from '../../core/katexSafeRender'
+import { eqTagsForText, type EqNumbering, type EqTagStyle } from '../../core/numbering'
 
 /**
  * ============================================================================
@@ -48,15 +49,27 @@ interface DecoItem {
   deco: Decoration
 }
 
-function buildDecorations(state: EditorState, macros: MacroMap): DecorationSet {
+export interface EditorNumbering {
+  eq: EqNumbering
+  eqTag: EqTagStyle
+}
+
+function buildDecorations(state: EditorState, macros: MacroMap, numbering: EditorNumbering): DecorationSet {
   const text = state.doc.toString()
   const sel = state.selection.main
   const ranges = scanMath(text)
   const items: DecoItem[] = []
+  const tags = eqTagsForText(text, numbering)
 
   for (const r of ranges) {
     const touches = sel.from <= r.to && sel.to >= r.from
-    const active = touches && !(sel.empty && (sel.head === r.from || sel.head === r.to))
+    /**
+     * 光标停在块级公式第一行的行首（`$$` 之前）时也要展开源码——
+     * 否则刚把光标挪上去，整块就塌成一个渲染框，反而挡住了要改的那几行。
+     */
+    const atStart = sel.empty && sel.head === r.from
+    const atEnd = sel.empty && sel.head === r.to
+    const active = touches && !atEnd && !(r.type !== 'display' && atStart)
 
     if (active) {
       // 展开源码态：淡色底 + LaTeX 语法高亮 + 错误波浪线
@@ -97,6 +110,7 @@ function buildDecorations(state: EditorState, macros: MacroMap): DecorationSet {
     // 渲染态
     const rendered = renderMathSafely(r.latex, r.type === 'display', macros, {
       tag: r.type === 'display' ? r.number : undefined,
+      tagLabel: r.type === 'display' && r.number ? tags.get(r.number) : undefined,
     })
     if (r.type === 'display') {
       const lineFrom = state.doc.lineAt(r.from)
@@ -136,13 +150,13 @@ function buildDecorations(state: EditorState, macros: MacroMap): DecorationSet {
 }
 
 /** 光标感知渲染的内联扩展（纯源码模式下不挂载） */
-export function mathRenderPlugin(getMacros: () => MacroMap) {
+export function mathRenderPlugin(getMacros: () => MacroMap, getNumbering: () => EditorNumbering = () => ({ eq: 'global', eqTag: 'paren' })) {
   const field = StateField.define<DecorationSet>({
-    create: (state) => buildDecorations(state, getMacros()),
+    create: (state) => buildDecorations(state, getMacros(), getNumbering()),
     update(value, tr) {
       const forced = tr.effects.some((e) => e.is(refreshMathEffect))
       if (tr.docChanged || tr.selection || forced) {
-        return buildDecorations(tr.state, getMacros())
+        return buildDecorations(tr.state, getMacros(), getNumbering())
       }
       return value.map(tr.changes)
     },
@@ -179,6 +193,8 @@ export function activeMathAt(state: EditorState): MathRange | null {
   const head = state.selection.main.head
   for (const r of scanMath(text)) {
     if (head > r.from && head < r.to) return r
+    // 块级公式停在开头也要算「在里面」，否则工作台会突然消失
+    if (r.type === 'display' && head === r.from) return r
   }
   return null
 }

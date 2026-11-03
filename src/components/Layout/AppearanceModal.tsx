@@ -9,6 +9,7 @@ import {
   type EditorFontKey,
   type PreviewFontKey,
 } from '../../core/appearance'
+import { eqTagText } from '../../core/numbering'
 
 /**
  * ============================================================================
@@ -31,7 +32,7 @@ export default function AppearanceModal({ open, onClose }: { open: boolean; onCl
       title="字体与外观"
       subtitle="渲染结果和源码分开设置，改完立刻生效，设置会被记住"
       icon={<Type size={18} />}
-      width="max-w-3xl"
+      width="max-w-4xl"
     >
       <div className="space-y-4">
         <div className="grid grid-cols-2 gap-6">
@@ -151,6 +152,139 @@ export default function AppearanceModal({ open, onClose }: { open: boolean; onCl
           </section>
         </div>
 
+
+        {/* ---------------- 排印细节 ---------------- */}
+        <div className="rounded-xl border border-ink-200 p-3">
+          <SectionTitle>排印细节（定理、编号、数学字形）</SectionTitle>
+          <div className="grid grid-cols-2 gap-x-6">
+            <div>
+              <Row label="数学字形">
+                <Pills
+                  value={settings.mathStyle}
+                  options={[
+                    { v: 'cm', label: '锐利' },
+                    { v: 'soft', label: '饱满（默认）' },
+                    { v: 'bold', label: '粗壮' },
+                  ]}
+                  onChange={(v) => updateSettings({ mathStyle: v as typeof settings.mathStyle })}
+                />
+                <p className="mt-1 text-[10.5px] leading-relaxed text-ink-400">
+                  公式用的是 Computer Modern，笔画偏细偏尖。「饱满」会给笔画加一道极细描边，屏幕上看更圆润；打印几乎无差别。
+                </p>
+              </Row>
+
+              <Row label="容器样式">
+                <div className="grid grid-cols-4 gap-1.5">
+                  {[
+                    { v: 'classic', label: '经典' },
+                    { v: 'beamer', label: '色块' },
+                    { v: 'boxed', label: '方框' },
+                    { v: 'plain', label: '纯文' },
+                  ].map((o) => (
+                    <button
+                      key={o.v}
+                      onClick={() => updateSettings({ thmStyle: o.v as typeof settings.thmStyle })}
+                      className={`rounded-lg py-1.5 text-[11.5px] transition ${
+                        settings.thmStyle === o.v
+                          ? 'bg-accent-50 text-accent-700 ring-1 ring-accent-300'
+                          : 'text-ink-600 ring-1 ring-ink-200 hover:bg-ink-50'
+                      }`}
+                    >
+                      {o.label}
+                    </button>
+                  ))}
+                </div>
+                <label className="mt-2 flex cursor-pointer items-center gap-1.5 text-[11.5px] text-ink-600">
+                  <input
+                    type="checkbox"
+                    checked={settings.thmBodyKai}
+                    onChange={(e) => updateSettings({ thmBodyKai: e.target.checked })}
+                    className="h-3.5 w-3.5 accent-accent-600"
+                  />
+                  定理 / 证明正文用楷体（标题始终黑体）
+                </label>
+              </Row>
+            </div>
+
+            <div>
+              <Row label="定理编号">
+                <Pills
+                  value={settings.thmNumbering}
+                  options={[
+                    { v: 'section', label: '按节：定义 1.1' },
+                    { v: 'global', label: '连续：定义 1' },
+                  ]}
+                  onChange={(v) => updateSettings({ thmNumbering: v as typeof settings.thmNumbering })}
+                />
+              </Row>
+
+              <Row label="公式编号">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <Pills
+                    value={settings.eqNumbering}
+                    options={[
+                      { v: 'global', label: '连续' },
+                      { v: 'section', label: '按节' },
+                    ]}
+                    onChange={(v) => updateSettings({ eqNumbering: v as typeof settings.eqNumbering })}
+                  />
+                  <span className="text-ink-300">·</span>
+                  <Pills
+                    value={settings.eqTagStyle}
+                    options={[
+                      { v: 'paren', label: '(1)' },
+                      { v: 'dash', label: '1-1' },
+                      { v: 'dot', label: '1.1' },
+                    ]}
+                    onChange={(v) => updateSettings({ eqTagStyle: v as typeof settings.eqTagStyle })}
+                  />
+                </div>
+                <p className="mt-1 text-[10.5px] text-ink-400">
+                  当前效果：{eqTagText(1, 1, settings.eqNumbering, settings.eqTagStyle)}　编号本身可点击，正文里写 @eq:标签 也能跳回来。
+                </p>
+              </Row>
+
+              <Row label="证毕符号">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {['∎', '□', '■', '▪', 'Q.E.D.'].map((sym) => (
+                    <button
+                      key={sym}
+                      onClick={() => updateSettings({ qedSymbol: sym })}
+                      className={`min-w-[30px] rounded-lg px-2 py-1 text-[12px] transition ${
+                        settings.qedSymbol === sym
+                          ? 'bg-accent-50 text-accent-700 ring-1 ring-accent-300'
+                          : 'text-ink-600 ring-1 ring-ink-200 hover:bg-ink-50'
+                      }`}
+                    >
+                      {sym}
+                    </button>
+                  ))}
+                  <button
+                    onClick={() => updateSettings({ qedSymbol: '' })}
+                    className={`rounded-lg px-2 py-1 text-[11.5px] transition ${
+                      settings.qedSymbol === ''
+                        ? 'bg-accent-50 text-accent-700 ring-1 ring-accent-300'
+                        : 'text-ink-600 ring-1 ring-ink-200 hover:bg-ink-50'
+                    }`}
+                  >
+                    不要
+                  </button>
+                </div>
+                <div className="mt-1.5 flex items-center gap-1.5">
+                  <span className="text-[11px] text-ink-400">自定义</span>
+                  <input
+                    value={settings.qedSymbol}
+                    onChange={(e) => updateSettings({ qedSymbol: e.target.value.slice(0, 12) })}
+                    placeholder="∎"
+                    className="h-7 w-[62px] rounded-lg border border-ink-200 px-2 text-center text-[12px] outline-none focus:border-accent-400"
+                  />
+                  <span className="text-[10.5px] text-ink-400">留空则不加符号</span>
+                </div>
+              </Row>
+            </div>
+          </div>
+        </div>
+
         <div className="flex items-center justify-between border-t border-ink-100 pt-3">
           <p className="text-[11px] text-ink-400">
             字体按「装了就用」排序；系统里没有的自动退到下一个，不会变成方框。
@@ -244,6 +378,32 @@ function Slider({
         {value}
         {suffix}
       </span>
+    </div>
+  )
+}
+
+function Pills<T extends string>({
+  value,
+  options,
+  onChange,
+}: {
+  value: T
+  options: Array<{ v: T; label: string }>
+  onChange: (v: T) => void
+}) {
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {options.map((o) => (
+        <button
+          key={o.v}
+          onClick={() => onChange(o.v)}
+          className={`rounded-lg px-2.5 py-1 text-[11.5px] transition ${
+            value === o.v ? 'bg-accent-50 text-accent-700 ring-1 ring-accent-300' : 'text-ink-600 ring-1 ring-ink-200 hover:bg-ink-50'
+          }`}
+        >
+          {o.label}
+        </button>
+      ))}
     </div>
   )
 }

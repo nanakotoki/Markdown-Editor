@@ -746,6 +746,10 @@ export interface RenderOptions {
   macros?: MacroMap
   /** 附加编号，如 (3) */
   tag?: number
+  /** 编号的完整文本（优先于 tag），如 (1.1) / 1-1 */
+  tagLabel?: string
+  /** 编号点击后跳转的锚点 id */
+  tagHref?: string
   trust?: boolean
   strict?: boolean | 'ignore' | 'warn' | 'error'
 }
@@ -755,11 +759,21 @@ export interface RenderOptions {
  * KaTeX 自带的 `\tag` 是绝对定位到容器右端：公式一旦比容器宽，编号就会压住公式。
  * 这里改为「公式列 + 编号列」的网格布局，公式自身可横向滚动，编号永远可见。
  */
-function wrapEquationNumber(html: string, tag?: number, displayMode?: boolean): string {
-  if (tag == null || !displayMode) return html
+function wrapEquationNumber(
+  html: string,
+  tag?: number,
+  displayMode?: boolean,
+  tagLabel?: string,
+  tagHref?: string
+): string {
+  const text = tagLabel ?? (tag == null ? '' : `(${tag})`)
+  if (!text || !displayMode) return html
+  const inner = tagHref
+    ? `<a class="mf-eq-tag" href="#${escapeHtml(tagHref)}" title="点击定位到这条公式">${escapeHtml(text)}</a>`
+    : escapeHtml(text)
   return (
     `<span class="mf-eq"><span class="mf-eq-body">${html}</span>` +
-    `<span class="mf-eq-no">(${tag})</span></span>`
+    `<span class="mf-eq-no">${inner}</span></span>`
   )
 }
 
@@ -801,7 +815,7 @@ export function renderMathSafely(
         strict: (opts.strict ?? 'ignore') as any,
       })
       return {
-        html: wrapEquationNumber(html, opts.tag, displayMode),
+        html: wrapEquationNumber(html, opts.tag, displayMode, opts.tagLabel, opts.tagHref),
         ok: true,
         rawError: null,
         healed,
@@ -828,7 +842,7 @@ export function renderMathSafely(
   } catch {
     html = `<span class="mf-math-error">${escapeHtml(source)}</span>`
   }
-  return { html: wrapEquationNumber(html, opts.tag, displayMode), ok: false, rawError: lastError, healed, diagnosis }
+  return { html: wrapEquationNumber(html, opts.tag, displayMode, opts.tagLabel, opts.tagHref), ok: false, rawError: lastError, healed, diagnosis }
 }
 
 export function escapeHtml(s: string): string {

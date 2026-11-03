@@ -91,6 +91,10 @@ export function editorFontStack(key: EditorFontKey): string {
   return (EDITOR_FONTS.find((f) => f.key === key) ?? EDITOR_FONTS[0]).stack
 }
 
+/** 楷体栈：定理正文与证明的「证」字用它，装不到就退到宋体，不会出方框 */
+export const KAI_STACK =
+  "'LXGW WenKai', 'Kaiti SC', 'STKaiti', 'KaiTi', 'Source Han Serif SC', 'Noto Serif CJK SC', 'Songti SC', serif"
+
 /** 把设置写进 :root 变量。样式表只读变量，因此切换即刻生效。 */
 export function applyAppearance(s: Settings) {
   if (typeof document === 'undefined') return
@@ -101,4 +105,10 @@ export function applyAppearance(s: Settings) {
   root.setProperty('--mf-academic-weight', String(s.previewWeight))
   root.setProperty('--mf-editor-font', editorFontStack(s.editorFont))
   root.setProperty('--mf-editor-size', `${s.editorFontSize}px`)
+  root.setProperty('--mf-kai', KAI_STACK)
+  // 定理/证明正文：默认楷体（中文讲义惯例），也可以跟着正文字体走
+  root.setProperty('--mf-thm-body-font', s.thmBodyKai ? KAI_STACK : previewFontStack(s.previewFont))
+  // 这两项靠属性选择器切换样式，比逐个改 class 稳
+  document.documentElement.dataset.mathStyle = s.mathStyle
+  document.documentElement.dataset.thmStyle = s.thmStyle
 }

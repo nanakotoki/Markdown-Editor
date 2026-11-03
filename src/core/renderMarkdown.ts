@@ -5,6 +5,15 @@ import remarkGfm from 'remark-gfm'
 import remarkDirective from 'remark-directive'
 import type { MacroMap } from './katexSafeRender'
 import { escapeHtml, renderMathSafely } from './katexSafeRender'
+import {
+  DEFAULT_NUMBERING,
+  eqTagText,
+  thmLabel,
+  type EqNumbering,
+  type EqTagStyle,
+  type NumberingConfig,
+  type ThmNumbering,
+} from './numbering'
 import { renderAlgorithmHtml } from '../components/Preview/AlgorithmBlock'
 import type { BibEntry } from '../store/useEditorStore'
 
@@ -69,6 +78,10 @@ export interface RenderOptions {
    * 应用内预览保持关闭，由点击处理函数接管。
    */
   externalRefLinks?: boolean
+  /** 编号规则：定理按节 / 公式按节 / 编号写法 */
+  numbering?: Partial<NumberingConfig>
+  /** 证毕符号（空串表示不加） */
+  qed?: string
 }
 
 const THM_TYPES: Record<string, { cn: string; kind: RefKind; env: string }> = {
@@ -125,7 +138,19 @@ function mergeTextDirectives(tree: any) {
       visit(child)
       out.push(child)
     }
-    parent.children = out
+    // remark 会在 `}`、`{` 处把一段文字切成多个 text 节点
+    // （例如 `\ref{eq:x}` 会被切成 `\ref{eq:x` + `} ...`）。
+    // 交叉引用、文献引用都要看到完整片段，所以这里把相邻文本合并回去。
+    const merged: any[] = []
+    for (const child of out) {
+      const prev = merged[merged.length - 1]
+      if (prev && prev.type === 'text' && child.type === 'text') {
+        prev.value = String(prev.value ?? '') + String(child.value ?? '')
+        continue
+      }
+      merged.push(child)
+    }
+    parent.children = merged
   }
   visit(tree)
 }
@@ -158,9 +183,17 @@ interface Ctx extends Required<Pick<RenderOptions, 'macros'>> {
   bib: BibEntry[]
   citationStyle: 'numeric' | 'author-year'
   eqCounter: number
+  /** 本节内的公式序号（按节编号时用） */
+  eqInSection: number
   thmCounters: Record<string, number>
   algCounter: number
   headingCounter: number
+  /** 当前是第几节：遇到「节标题」就 +1 */
+  sectionNo: number
+  /** 哪一级标题算节（H1 当标题时用 H2） */
+  sectionDepth: 1 | 2
+  numbering: NumberingConfig
+  qed: string
   eqLabels: Map<string, { n: number; html: string }>
   thmMeta: Map<string, { label: string; previewHtml: string }>
   algLabels: Map<string, number>
@@ -170,6 +203,8 @@ interface Ctx extends Required<Pick<RenderOptions, 'macros'>> {
   toc: TocItem[]
   extRefs: RefEntry[]
   externalRefLinks: boolean
+  /** 「定理 1.1」这类自然语言提及 -> 引用条目，用于自动加链接 */
+  mentionIndex: Map<string, RefEntry>
 }
 
 export function renderMarkdown(md: string, opts: RenderOptions = {}): RenderResult {
@@ -180,9 +215,18 @@ export function renderMarkdown(md: string, opts: RenderOptions = {}): RenderResu
     bib: opts.bib ?? [],
     citationStyle: opts.citationStyle ?? 'numeric',
     eqCounter: 0,
+    eqInSection: 0,
     thmCounters: {},
     algCounter: 0,
     headingCounter: 0,
+    sectionNo: 0,
+    sectionDepth: countH1(tree) >= 2 ? 1 : 2,
+    numbering: {
+      thm: (opts.numbering?.thm ?? DEFAULT_NUMBERING.thm) as ThmNumbering,
+      eq: (opts.numbering?.eq ?? DEFAULT_NUMBERING.eq) as EqNumbering,
+      eqTag: (opts.numbering?.eqTag ?? DEFAULT_NUMBERING.eqTag) as EqTagStyle,
+    },
+    qed: opts.qed ?? '∎',
     eqLabels: new Map(),
     thmMeta: new Map(),
     algLabels: new Map(),
@@ -192,10 +236,12 @@ export function renderMarkdown(md: string, opts: RenderOptions = {}): RenderResu
     toc: [],
     extRefs: opts.extRefs ?? [],
     externalRefLinks: opts.externalRefLinks ?? false,
+    mentionIndex: new Map(),
   }
 
   // 第一遍：为公式/定理/算法/标题分配编号与 id（保证交叉引用可以前向引用）
   collect(tree, ctx)
+  ctx.mentionIndex = buildMentionIndex(ctx.refs)
 
   // 第二遍：渲染
   const body = (tree.children as any[])
@@ -246,9 +292,26 @@ function textOf(node: any): string {
   return ''
 }
 
+/** 有几个 H1：决定「节」是 H1 还是 H2 */
+function countH1(tree: any): number {
+  let n = 0
+  const walk = (node: any) => {
+    if (node.type === 'heading' && node.depth === 1) n++
+    for (const c of node.children ?? []) walk(c)
+  }
+  walk(tree)
+  return n
+}
+
 function collect(tree: any, ctx: Ctx) {
   const walk = (node: any) => {
     if (node.type === 'heading') {
+      // 每遇到一个 H1/H2 就进入新的「节」：定理、公式的编号重新起算
+      if (node.depth === ctx.sectionDepth) {
+        ctx.sectionNo++
+        ctx.thmCounters = {}
+        ctx.eqInSection = 0
+      }
       const text = textOf(node)
       ctx.headingCounter++
       const id = `sec-${ctx.headingCounter}`
@@ -261,20 +324,28 @@ function collect(tree: any, ctx: Ctx) {
 
     if (node.type === 'math') {
       const label = /\\label\s*\{([^{}]*)\}/.exec(node.value ?? '')?.[1]
+      ctx.eqCounter++
+      ctx.eqInSection++
+      const section = Math.max(1, ctx.sectionNo)
+      const seq = ctx.numbering.eq === 'section' ? ctx.eqInSection : ctx.eqCounter
+      const tag = eqTagText(section, seq, ctx.numbering.eq, ctx.numbering.eqTag)
+      const anchor = label ? anchorOf(label) : `eq-${ctx.eqCounter}`
+      node.data = {
+        ...(node.data ?? {}),
+        mfEqNo: ctx.eqCounter,
+        mfEqTag: tag,
+        mfEqAnchor: anchor,
+        mfLabel: label,
+      }
       if (label) {
-        ctx.eqCounter++
-        node.data = { ...(node.data ?? {}), mfEqNo: ctx.eqCounter, mfLabel: label }
         ctx.eqLabels.set(label, { n: ctx.eqCounter, html: '' })
         ctx.refs.push({
           kind: 'eq',
           id: bareId(label),
-          anchor: anchorOf(label),
-          label: `式 (${ctx.eqCounter})`,
+          anchor,
+          label: `式 ${tag}`,
           detail: truncate(cleanLatex(node.value ?? ''), 48),
         })
-      } else if (ctx.autoNumber) {
-        ctx.eqCounter++
-        node.data = { ...(node.data ?? {}), mfEqNo: ctx.eqCounter }
       }
       return
     }
@@ -284,6 +355,7 @@ function collect(tree: any, ctx: Ctx) {
       const id: string | undefined = node.attributes?.id
       const { title } = directiveTitle(node)
       if (meta) {
+        const section = Math.max(1, ctx.sectionNo)
         if (meta.env === 'proof' || meta.env === 'remark') {
           if (id) {
             ctx.thmMeta.set(id, { label: meta.cn, previewHtml: '' })
@@ -293,14 +365,15 @@ function collect(tree: any, ctx: Ctx) {
           const key = meta.env
           ctx.thmCounters[key] = (ctx.thmCounters[key] ?? 0) + 1
           const n = ctx.thmCounters[key]
-          node.data = { ...(node.data ?? {}), mfThmNo: n }
+          node.data = { ...(node.data ?? {}), mfThmNo: n, mfThmSection: section }
           if (id) {
-            ctx.thmMeta.set(id, { label: `${meta.cn} ${n}`, previewHtml: '' })
+            const label = thmLabel(meta.cn, section, n, ctx.numbering.thm)
+            ctx.thmMeta.set(id, { label, previewHtml: '' })
             ctx.refs.push({
               kind: meta.kind,
               id: bareId(id),
               anchor: anchorOf(id),
-              label: `${meta.cn} ${n}`,
+              label,
               detail: title ? `· ${title}` : '',
             })
           }
@@ -360,6 +433,7 @@ function renderBlock(node: any, ctx: Ctx): string {
       return `<${tag} id="${id}" class="mf-heading mf-h${node.depth}">${renderInline(children, ctx)}</${tag}>`
     }
     case 'paragraph':
+      if (PAGEBREAK_TEXT_RE.test(textOf(node))) return pageBreakHtml()
       return `<p class="mf-p">${renderInline(node.children ?? [], ctx)}</p>`
 
     case 'text':
@@ -408,19 +482,27 @@ function renderBlock(node: any, ctx: Ctx): string {
     case 'math': {
       const label = node.data?.mfLabel as string | undefined
       const no = node.data?.mfEqNo as number | undefined
-      const r = renderMathSafely(node.value ?? '', true, ctx.macros, { tag: ctx.autoNumber ? no : undefined })
-      const idAttr = label ? ` id="${anchorOf(label)}" data-eq-label="${escapeHtml(label)}"` : ''
+      const tagText = node.data?.mfEqTag as string | undefined
+      const anchor = (node.data?.mfEqAnchor as string | undefined) ?? (label ? anchorOf(label) : undefined)
+      const r = renderMathSafely(node.value ?? '', true, ctx.macros, {
+        tag: ctx.autoNumber ? no : undefined,
+        tagLabel: ctx.autoNumber ? tagText : undefined,
+        tagHref: ctx.autoNumber ? anchor : undefined,
+      })
+      const idAttr = anchor ? ` id="${anchor}"` : ''
+      const labelAttr = label ? ` data-eq-label="${escapeHtml(label)}"` : ''
       if (label) {
-        const entry = ctx.refs.find((x) => x.kind === 'eq' && x.id === label)
+        const entry = ctx.refs.find((x) => x.kind === 'eq' && x.id === bareId(label))
         if (entry) entry.previewHtml = r.html
       }
-      return `<div class="mf-display"${idAttr}>${r.html}</div>`
+      return `<div class="mf-display"${idAttr}${labelAttr}>${r.html}</div>`
     }
 
     case 'containerDirective':
       return renderContainer(node, ctx)
 
     case 'html':
+      if (PAGEBREAK_TEXT_RE.test(node.value ?? '')) return pageBreakHtml()
       return node.value ?? ''
 
     case 'definition':
@@ -456,9 +538,21 @@ export function anchorOf(id: string): string {
   return id.replace(/:/g, '-')
 }
 
-/** 去掉 kind: 前缀，得到裸 id */
+/** 前缀别名：`{#definition:x}` 与 `@def:x` 应当指向同一个目标 */
+const KIND_ALIASES = new Set([
+  'eq', 'thm', 'lem', 'def', 'prop', 'cor', 'exa', 'prf', 'alg', 'sec', 'fig', 'tab',
+  'theorem', 'lemma', 'definition', 'proposition', 'corollary', 'example', 'proof',
+  'algorithm', 'remark', 'note', 'equation',
+])
+
+/** 去掉 kind: 前缀，得到裸 id（`def:contraction` -> `contraction`） */
 export function bareId(id: string): string {
-  return id.replace(/^(eq|thm|lem|def|prop|cor|exa|prf|alg|sec|fig|tab):/, '')
+  const i = id.indexOf(':')
+  if (i > 0) {
+    const head = id.slice(0, i).toLowerCase()
+    if (KIND_ALIASES.has(head)) return id.slice(i + 1)
+  }
+  return id
 }
 
 /**
@@ -477,8 +571,24 @@ export function parseBlockMeta(meta: string): { title?: string; id?: string } {
   return out
 }
 
+/** 手动分页：屏幕上是虚线分隔，打印时真正换页 */
+function pageBreakHtml(): string {
+  return '<div class="mf-pagebreak" data-mf-pagebreak="1" role="separator"><span>分页</span></div>'
+}
+
+const PAGEBREAK_TEXT_RE = /^\s*(?:\\(?:newpage|pagebreak|clearpage)\b[ \t]*|<!--\s*page-?break\s*-->)\s*$/i
+
+/** 证毕符号插在最后一个段落末尾，保证它落在框内、紧跟着最后一句 */
+function appendQed(html: string, symbol: string): string {
+  if (!symbol) return html
+  const q = `<span class="mf-qed" aria-hidden="true">${escapeHtml(symbol)}</span>`
+  if (/<\/p>\s*$/.test(html)) return html.replace(/<\/p>\s*$/, `${q}</p>`)
+  return `${html}${q}`
+}
+
 function renderContainer(node: any, ctx: Ctx): string {
   const name: string = node.name
+  if (name === 'pagebreak' || name === 'newpage' || name === 'clearpage') return pageBreakHtml()
   const meta = THM_TYPES[name]
   const id: string | undefined = node.attributes?.id
   const { title, children } = directiveTitle(node)
@@ -488,25 +598,39 @@ function renderContainer(node: any, ctx: Ctx): string {
     return `<div class="mf-box mf-box-generic">${title ? `<div class="mf-box-title">${escapeHtml(title)}</div>` : ''}${inner}</div>`
   }
 
-  if (meta.env === 'proof' || meta.env === 'remark') {
-    const isProof = meta.env === 'proof'
+  if (meta.env === 'proof') {
     if (id) {
       const m = ctx.thmMeta.get(id)
       if (m) m.previewHtml = inner
     }
     return `<div class="mf-thm mf-proof"${id ? ` id="${anchorOf(id)}"` : ''}>
-      <div class="mf-thm-head"><span class="mf-thm-label">${meta.cn}${title ? `<span class="mf-thm-title">（${escapeHtml(title)}）</span>` : ''}</span></div>
-      <div class="mf-thm-body">${inner}${isProof ? '<span class="mf-qed">∎</span>' : ''}</div>
+      <div class="mf-thm-body"><span class="mf-proof-q">证</span>${
+        title ? `<span class="mf-proof-title">（${escapeHtml(title)}）</span>` : ''
+      }${appendQed(inner, ctx.qed)}</div>
+    </div>`
+  }
+
+  if (meta.env === 'remark') {
+    if (id) {
+      const m = ctx.thmMeta.get(id)
+      if (m) m.previewHtml = inner
+    }
+    return `<div class="mf-thm mf-thm-remark"${id ? ` id="${anchorOf(id)}"` : ''}>
+      <div class="mf-thm-body"><span class="mf-thm-inline-label">${meta.cn}</span>${inner}</div>
     </div>`
   }
 
   const n = node.data?.mfThmNo ?? 1
+  const section = node.data?.mfThmSection ?? 1
+  const labelText = thmLabel(meta.cn, section, n, ctx.numbering.thm)
   if (id) {
     const m = ctx.thmMeta.get(id)
     if (m) m.previewHtml = inner
   }
   return `<div class="mf-thm mf-thm-${meta.env}"${id ? ` id="${anchorOf(id)}"` : ''}>
-    <div class="mf-thm-head"><span class="mf-thm-label">${meta.cn} ${n}</span>${title ? `<span class="mf-thm-title">（${escapeHtml(title)}）</span>` : ''}</div>
+    <div class="mf-thm-head"><span class="mf-thm-label">${escapeHtml(labelText)}</span>${
+      title ? `<span class="mf-thm-title">（${escapeHtml(title)}）</span>` : ''
+    }</div>
     <div class="mf-thm-body">${inner}</div>
   </div>`
 }
@@ -573,36 +697,96 @@ function renderInlineNode(node: any, ctx: Ctx): string {
   }
 }
 
-const REF_RE = /@(eq|thm|lem|def|prop|cor|exa|prf|alg|sec|fig|tab):([A-Za-z0-9_\-:.]+)/g
-const CITE_RE = /\[@([A-Za-z0-9_\-:.]+(?:\s*[;,]\s*@?[A-Za-z0-9_\-:.]+)*)\]/g
+const CITE_SRC = /\[@([A-Za-z0-9_\-:.]+(?:\s*[;,]\s*@?[A-Za-z0-9_\-:.]+)*)\]/.source
+const REF_SRC = /@(eq|thm|lem|def|prop|cor|exa|prf|alg|sec|fig|tab):([A-Za-z0-9_\-:.]+)/.source
+/** LaTeX 风格的 \ref{eq:x} / \eqref{eq:x} */
+const TEXREF_SRC = /\\(?:eq|c|auto|page)?ref\*?\{([^{}]+)\}/.source
+/** 正文里直接说「由定理 1.1」「见式 (2)」——能对上编号就自动变成链接 */
+const MENTION_SRC = /(定理|引理|定义|命题|推论|例题|注|算法|式|公式)[ \t]*[（(]?[ \t]*(\d+(?:[.\-–]\d+)*)[ \t]*[）)]?/.source
+
+function normMention(s: string): string {
+  return s.replace(/[\s\u00a0]/g, '').replace(/（/g, '(').replace(/）/g, ')')
+}
+
+/** 把「定理 1.1」这类标签拆成可匹配的几种写法 */
+function mentionKeys(label: string): string[] {
+  const keys = new Set<string>([normMention(label)])
+  const m = /^(.+?)[\s]*[（(]?([\d]+(?:[.\-–][\d]+)*)[）)]?$/.exec(label.trim())
+  if (m) {
+    const cn = m[1].trim()
+    keys.add(`${cn}${m[2]}`)
+    keys.add(`${cn}(${m[2]})`)
+  }
+  return [...keys]
+}
+
+function buildMentionIndex(refs: RefEntry[]): Map<string, RefEntry> {
+  const map = new Map<string, RefEntry>()
+  for (const r of refs) {
+    if (r.kind === 'sec' || r.kind === 'cite') continue
+    for (const k of mentionKeys(r.label)) if (!map.has(k)) map.set(k, r)
+  }
+  return map
+}
+
+function refLink(entry: RefEntry, text: string, extraClass = ''): string {
+  return `<a class="mf-ref${extraClass ? ` ${extraClass}` : ''}" href="#${entry.anchor}" data-ref-kind="${entry.kind}" data-ref-id="${entry.id}" data-ref-title="${escapeHtml(entry.label)}" data-ref-detail="${escapeHtml(entry.detail ?? '')}">${escapeHtml(text)}</a>`
+}
 
 function renderPlainText(text: string, ctx: Ctx): string {
   let html = ''
   let last = 0
-  const combined = new RegExp(`${CITE_RE.source}|${REF_RE.source}`, 'g')
+  const combined = new RegExp([CITE_SRC, REF_SRC, TEXREF_SRC, MENTION_SRC].join('|'), 'g')
   let m: RegExpExecArray | null
   while ((m = combined.exec(text))) {
+    const raw = m[0]
     html += escapeHtml(text.slice(last, m.index))
     if (m[1] !== undefined) {
       html += renderCitation(m[1], ctx)
     } else if (m[2] !== undefined) {
       html += renderRef(m[2], m[3], ctx)
+    } else if (m[4] !== undefined) {
+      html += renderTexRef(m[4], raw, ctx)
+    } else if (m[5] !== undefined) {
+      html += renderMention(raw, ctx)
     }
-    last = m.index + m[0].length
+    last = m.index + raw.length
   }
   html += escapeHtml(text.slice(last))
   return html
 }
 
+/** `\ref{eq:x}`：和 @eq:x 等价，但允许直接写 LaTeX 习惯的写法 */
+function renderTexRef(id: string, raw: string, ctx: Ctx): string {
+  const bare = bareId(id)
+  const entry =
+    ctx.refs.find((r) => r.id === bare && (!id.includes(':') || id.startsWith(`${r.kind}:`))) ??
+    ctx.refs.find((r) => r.id === bare)
+  if (entry) return refLink(entry, entry.label, 'mf-ref-tex')
+  return `<span class="mf-ref-broken" title="未找到引用目标 ${escapeHtml(raw)}">${escapeHtml(raw)}?</span>`
+}
+
+/** 正文里的「定理 1.1」：编号能对上就加链接，对不上就原样保留 */
+function renderMention(raw: string, ctx: Ctx): string {
+  const core = raw.replace(/[\s\u00a0]+$/, '')
+  const tail = raw.slice(core.length)
+  const entry = ctx.mentionIndex.get(normMention(core))
+  if (!entry) return escapeHtml(raw)
+  return refLink(entry, core, 'mf-ref-auto') + escapeHtml(tail)
+}
+
 function renderRef(kind: string, id: string, ctx: Ctx): string {
   const bare = bareId(id)
-  const entry = ctx.refs.find((r) => r.id === bare && r.kind === kind)
+  const entry =
+    ctx.refs.find((r) => r.id === bare && r.kind === kind) ??
+    // 前缀写错（例如把 def 写成 thm）时，只要 id 唯一仍然给链接，避免变成红字
+    ctx.refs.find((r) => r.id === bare)
   if (entry) {
-    return `<a class="mf-ref" href="#${entry.anchor}" data-ref-kind="${kind}" data-ref-id="${entry.id}" data-ref-title="${escapeHtml(entry.label)}" data-ref-detail="${escapeHtml(entry.detail ?? '')}">${escapeHtml(entry.label)}</a>`
+    return refLink(entry, entry.label)
   }
 
   // 当前文件里没有目标 —— 看看是不是工作区里别的文件定义的
-  const ext = ctx.extRefs.find((r) => r.id === bare && r.kind === kind)
+  const ext = ctx.extRefs.find((r) => r.id === bare && r.kind === kind) ?? ctx.extRefs.find((r) => r.id === bare)
   if (ext?.file) {
     const anchor = ext.anchor.includes('#') ? ext.anchor.slice(ext.anchor.indexOf('#') + 1) : ext.anchor
     // 导出成静态站点时，链接指向同目录下编译好的 .html，浏览器里能直接跳过去

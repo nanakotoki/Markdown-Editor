@@ -12,6 +12,9 @@
   --mf-academic-weight: 400;
   --mf-editor-font: 'Latin Modern Roman', 'Songti SC', 'STSong', 'SimSun', Georgia, serif;
   --mf-editor-size: 15px;
+  /* 楷体：定理正文、证明里的「证」字用它。装了霞鹜文楷会优先用，
+     没有就退到系统楷体；再没有才落到宋体，不会出现方框。 */
+  --mf-kai: 'LXGW WenKai', 'Kaiti SC', 'STKaiti', 'KaiTi', 'Source Han Serif SC', 'Noto Serif CJK SC', 'Songti SC', serif;
   --mf-ink: #1f2733;
   --mf-ink-soft: #5d6779;
   --mf-rule: #1f2733;
@@ -126,6 +129,35 @@ body {
 .cm-math-error {
   text-decoration: underline wavy #dc2626;
   text-underline-offset: 3px;
+}
+
+/* 容器标签的中文版：把 `::: theorem` 显示成「定理 1.1」 */
+.cm-directive-label-cn {
+  background: #e8f0ff;
+  color: #1d3a8a;
+  cursor: text;
+}
+.cm-ref-chip-cn {
+  background: #eef4ff;
+  color: #1d4ed8;
+  cursor: text;
+}
+/* 内联模式下的手动分页标记 */
+.cm-pagebreak {
+  position: relative;
+  height: 18px;
+  margin: 8px 0;
+  border-top: 1px dashed #b9c3d3;
+}
+.cm-pagebreak > span {
+  position: absolute;
+  right: 4px;
+  top: -8px;
+  padding: 0 6px;
+  background: #fff;
+  font: 600 10px var(--mf-sans);
+  color: #94a3b8;
+  letter-spacing: 0.08em;
 }
 
 /* 折叠的 `:::` 闭合行：不占高度 */
@@ -418,6 +450,39 @@ body {
   font-size: 1.03em;
 }
 
+/* 公式编号：比原来大一档，点一下能定位到这条式子 */
+.mf-eq-no {
+  font-size: 1.08em;
+  color: #1f2937;
+  letter-spacing: 0.01em;
+}
+.mf-eq-tag {
+  color: inherit;
+  text-decoration: none;
+  padding: 0 2px;
+  border-radius: 3px;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.mf-eq-tag:hover {
+  background: #eef4ff;
+  color: var(--mf-accent);
+}
+
+/* 数学字形：Computer Modern 笔画偏细偏尖，
+   soft / bold 用极细的描边把笔画「喂」圆一点，观感更接近印刷体。 */
+:root[data-math-style='soft'] .katex {
+  -webkit-text-stroke: 0.24px currentColor;
+}
+:root[data-math-style='bold'] .katex {
+  -webkit-text-stroke: 0.45px currentColor;
+}
+
+/* 自动加链接的「定理 1.1」：点线上和普通引用一致，但不要下划线抢视线 */
+.mf-ref-auto,
+.mf-ref-tex {
+  border-bottom-color: rgba(42, 85, 212, 0.28);
+}
+
 /* ---------------- 三线表 ---------------- */
 .mf-table-wrap {
   margin: 1.1em 0;
@@ -448,79 +513,225 @@ body {
   background: #f8f9fb;
 }
 
-/* ---------------- 定理容器 ---------------- */
-.mf-academic .mf-thm {
+/* ---------------- 定理 / 定义 / 证明容器 ---------------- */
+/*  版式由 data-thm-style 切换：classic（经典左边线）/ beamer（圆角色块）
+ *  / boxed（方正边框）/ plain（纯文字 run-in 标题）
+ *  标题一律黑体、正文默认楷体——这是中文数学讲义的通行做法。 */
+.mf-thm {
   margin: 1.15em 0;
-  padding: 10px 16px 10px 16px;
+  padding: 10px 16px;
   border-left: 3px solid #c6ccd8;
   background: #fafbfc;
   border-radius: 0 8px 8px 0;
   scroll-margin-top: 80px;
   break-inside: avoid;
+  display: flow-root; /* 让内部的浮动「证」与符号不溢出到框外 */
+  --mf-thm-tint: #eef4ff;
+  --mf-thm-line: #c6ccd8;
 }
-.mf-academic .mf-thm-head {
+.mf-thm-head {
   font-family: var(--mf-sans);
-  font-size: 0.92em;
-  margin-bottom: 0.15em;
-}
-.mf-academic .mf-thm-label {
+  font-size: 0.94em;
   font-weight: 700;
-  color: #223d87;
+  letter-spacing: 0.01em;
+  margin-bottom: 0.28em;
+  color: #1a3673;
 }
-.mf-academic .mf-thm-title {
+.mf-thm-label {
+  font-family: var(--mf-sans);
+  font-weight: 700;
+  color: inherit;
+}
+.mf-thm-title {
+  font-family: var(--mf-sans);
   font-weight: 600;
   color: #2f3846;
 }
-.mf-academic .mf-thm-body > .mf-p:first-child {
+.mf-thm-body {
+  font-family: var(--mf-thm-body-font, var(--mf-kai));
+  font-size: 0.985em;
+  line-height: 1.85;
+}
+.mf-thm-body > .mf-p:first-child {
   margin-top: 0.1em;
 }
-.mf-academic .mf-thm-body > .mf-p:last-child {
+.mf-thm-body > .mf-p:last-child {
   margin-bottom: 0.1em;
 }
-.mf-academic .mf-thm-theorem,
-.mf-academic .mf-thm-theorem-env {
+.mf-thm-theorem,
+.mf-thm-theorem-env {
+  --mf-thm-tint: #dbe6ff;
+  --mf-thm-line: #3b6ef0;
   border-left-color: #3b6ef0;
   background: #f6f9ff;
 }
-.mf-academic .mf-thm-definition {
+.mf-thm-definition {
+  --mf-thm-tint: #d7f0fe;
+  --mf-thm-line: #0ea5e9;
   border-left-color: #0ea5e9;
   background: #f5fbfe;
 }
-.mf-academic .mf-thm-lemma,
-.mf-academic .mf-thm-proposition,
-.mf-academic .mf-thm-corollary {
+.mf-thm-lemma,
+.mf-thm-proposition,
+.mf-thm-corollary {
+  --mf-thm-tint: #ece4ff;
+  --mf-thm-line: #8b5cf6;
   border-left-color: #8b5cf6;
   background: #faf8ff;
 }
-.mf-academic .mf-thm-example {
+.mf-thm-example {
+  --mf-thm-tint: #d5f7e8;
+  --mf-thm-line: #10b981;
   border-left-color: #10b981;
   background: #f5fdf9;
 }
-.mf-academic .mf-thm-proof {
+.mf-thm-remark {
+  --mf-thm-tint: #eceff4;
+  --mf-thm-line: #94a3b8;
   border-left-color: #94a3b8;
   background: #fbfbfc;
+}
+.mf-thm-inline-label {
+  font-family: var(--mf-sans);
+  font-weight: 700;
+  margin-right: 0.4em;
+  color: #475569;
+}
+
+/* 证明：楷体，行首「证」+ 段末证毕符号，符号留在框内 */
+.mf-proof {
+  border-left-color: #94a3b8;
+  background: #fbfbfc;
+}
+.mf-proof .mf-thm-body {
+  font-family: var(--mf-thm-body-font, var(--mf-kai));
+}
+.mf-proof-q {
+  float: left;
+  margin-right: 0.3em;
+  font-family: var(--mf-kai);
+  font-weight: 700;
+  color: #334155;
+  line-height: 1.85;
+  text-indent: 0;
+}
+/* 「证」用 run-in 写法：首段不再额外缩进两个字，否则会跟浮动的「证」叠成一大个缺口 */
+.mf-proof .mf-thm-body > .mf-p:first-child {
+  text-indent: 0;
+}
+.mf-proof-title {
+  font-family: var(--mf-sans);
+  font-size: 0.92em;
+  color: #64748b;
+}
+.mf-qed {
+  display: inline-block;
+  margin-left: 0.45em;
+  color: #334155;
+  font-size: 0.95em;
+  line-height: 1;
+  vertical-align: baseline;
+  white-space: nowrap;
 }
 .mf-academic .mf-thm-proof .mf-thm-label::after {
   content: '：';
 }
-.mf-academic .mf-qed {
-  float: right;
-  color: #414b5c;
-  font-size: 0.95em;
-  margin-left: 8px;
+
+/* --- beamer：圆角卡片 + 色块标题 --- */
+:root[data-thm-style='beamer'] .mf-thm {
+  padding: 0;
+  border: none;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(20, 26, 35, 0.05), 0 10px 24px -18px rgba(20, 26, 35, 0.45);
+  overflow: hidden;
 }
-.mf-academic .mf-box {
+:root[data-thm-style='beamer'] .mf-thm-head {
+  background: var(--mf-thm-tint);
+  color: #16305f;
+  padding: 7px 15px;
+  margin: 0;
+}
+:root[data-thm-style='beamer'] .mf-thm-body {
+  padding: 8px 15px 12px;
+}
+:root[data-thm-style='beamer'] .mf-proof {
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(20, 26, 35, 0.05);
+}
+:root[data-thm-style='beamer'] .mf-proof .mf-thm-body {
+  padding-top: 10px;
+}
+
+/* --- boxed：方正边框（论文里常见的「框起来」） --- */
+:root[data-thm-style='boxed'] .mf-thm {
+  padding: 10px 15px;
+  background: #fff;
+  border: 1px solid var(--mf-thm-line);
+  border-left-width: 1px;
+  border-radius: 3px;
+}
+:root[data-thm-style='boxed'] .mf-thm-head {
+  border-bottom: 1px solid rgba(148, 163, 184, 0.35);
+  padding-bottom: 4px;
+  margin-bottom: 6px;
+}
+
+/* --- plain：像 LaTeX 一样把标题并到正文里 --- */
+:root[data-thm-style='plain'] .mf-thm {
+  padding: 0;
+  border: none;
+  background: none;
+  border-radius: 0;
+  margin: 0.9em 0;
+}
+:root[data-thm-style='plain'] .mf-thm-head {
+  display: inline;
+  margin-right: 0.3em;
+}
+:root[data-thm-style='plain'] .mf-thm-body {
+  display: inline;
+}
+:root[data-thm-style='plain'] .mf-thm-body > .mf-p {
+  display: inline;
+}
+:root[data-thm-style='plain'] .mf-qed {
+  margin-left: 0.35em;
+}
+
+.mf-box {
   margin: 1em 0;
   padding: 10px 14px;
   background: #f8f9fb;
   border: 1px dashed #dfe3ea;
   border-radius: 8px;
+  display: flow-root;
 }
-.mf-academic .mf-box-title {
+.mf-box-title {
   font-family: var(--mf-sans);
   font-weight: 700;
   font-size: 0.92em;
   margin-bottom: 4px;
+}
+
+/* ---------------- 手动分页 ---------------- */
+.mf-pagebreak {
+  position: relative;
+  height: 0;
+  margin: 2em 0 1.6em;
+  border-top: 1px dashed #b9c3d3;
+  break-after: page;
+  page-break-after: always;
+}
+.mf-pagebreak > span {
+  position: absolute;
+  right: 0;
+  top: -0.85em;
+  padding: 0 7px;
+  background: #fff;
+  font: 600 10.5px var(--mf-sans);
+  color: #94a3b8;
+  letter-spacing: 0.06em;
 }
 
 /* ---------------- 交叉引用 ---------------- */
@@ -531,6 +742,8 @@ body {
   cursor: pointer;
   padding: 0 1px;
   transition: background 0.12s ease;
+  /* 「式 1-1」「定理 1.1」不能被折成两行 */
+  white-space: nowrap;
 }
 .mf-academic .mf-ref:hover {
   background: #eef4ff;
@@ -751,8 +964,16 @@ body {
     display: none !important;
   }
   .mf-academic {
-    font-size: 11pt;
-    line-height: 1.75;
+    font-size: var(--mf-academic-size, 16px);
+    line-height: var(--mf-academic-leading, 1.8);
+  }
+  /* 行间公式不该比正文大一圈 */
+  .mf-academic .katex,
+  .mf-academic .katex-display > .katex {
+    font-size: 1.04em;
+  }
+  .mf-academic .mf-display {
+    margin: 0.7em 0;
   }
   .mf-display,
   .mf-thm,
@@ -772,4 +993,156 @@ body {
 /* 分栏滚动条隐藏 */
 .mf-thin-scroll::-webkit-scrollbar {
   width: 6px;
+}
+
+/* ==========================================================================
+   阅读模式：按 A4 纸面分页
+   —— 纸宽 210mm / 高 297mm，页边距 20mm×18mm，@96dpi 换算成像素
+   ========================================================================== */
+
+.mf-read-scroll {
+  background: #eceff4;
+}
+.mf-read-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 8px;
+  background: rgba(236, 239, 244, 0.92);
+  backdrop-filter: blur(6px);
+  font-family: var(--mf-sans);
+  font-size: 12px;
+  color: #64748b;
+}
+.mf-sheet {
+  position: relative;
+  width: 794px; /* 210mm */
+  min-height: 1123px; /* 297mm */
+  margin: 0 auto 24px;
+  padding: 76px 68px; /* 20mm / 18mm */
+  background: #fff;
+  box-shadow: 0 10px 30px -20px rgba(20, 26, 35, 0.5);
+  overflow: hidden;
+  font-family: var(--mf-serif);
+  color: var(--mf-ink);
+  /* 屏幕与打印用同一套数值：看到的换页就是 PDF 的换页 */
+  font-size: var(--mf-academic-size, 16px);
+  line-height: var(--mf-academic-leading, 1.8);
+  font-weight: var(--mf-academic-weight, 400);
+}
+.mf-sheet .mf-academic {
+  font-size: inherit;
+  line-height: inherit;
+}
+
+/* 纸面（含量尺）上的公式一律与正文同字号：KaTeX 默认 1.21em，打印出来会显得突兀 */
+.mf-sheet .mf-academic .katex,
+.mf-sheet-measure .mf-academic .katex,
+.mf-sheet .mf-academic .katex-display > .katex,
+.mf-sheet-measure .mf-academic .katex-display > .katex {
+  font-size: 1.04em;
+}
+.mf-sheet .mf-academic .mf-display,
+.mf-sheet-measure .mf-academic .mf-display {
+  margin: 0.7em 0;
+}
+.mf-sheet-no {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 34px;
+  text-align: center;
+  font-family: var(--mf-sans);
+  font-size: 11px;
+  color: #94a3b8;
+  letter-spacing: 0.08em;
+}
+.mf-sheet-measure {
+  position: absolute;
+  left: -10000px;
+  top: 0;
+  visibility: hidden;
+  pointer-events: none;
+  width: 658px; /* 794 - 68*2 */
+  font-size: var(--mf-academic-size, 16px);
+  line-height: var(--mf-academic-leading, 1.8);
+}
+.mf-sheet-measure .mf-academic {
+  padding: 0;
+  font-size: inherit;
+  line-height: inherit;
+}
+
+/* 阅读模式下不显示「分页」小标签，虚线已经表达了意思 */
+.mf-sheet .mf-pagebreak > span {
+  display: none;
+}
+
+/* 只供打印的容器：屏幕上看不见，打印时替换整个界面 */
+.mf-print-holder {
+  display: none;
+}
+.mf-read-print {
+  margin-left: 6px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  font: 600 11.5px var(--mf-sans);
+  color: #475569;
+  cursor: pointer;
+}
+.mf-read-print:hover {
+  border-color: #94a3b8;
+  color: #1e293b;
+}
+
+@media print {
+  body.mf-printing > * {
+    display: none !important;
+  }
+  body.mf-printing > .mf-print-holder {
+    display: block !important;
+  }
+  body.mf-printing .mf-print-holder .mf-sheet {
+    margin: 0;
+    box-shadow: none;
+  }
+  .mf-read-toolbar {
+    display: none !important;
+  }
+  .mf-read-scroll {
+    background: #fff;
+  }
+  .mf-sheet {
+    width: auto;
+    min-height: 0;
+    margin: 0;
+    padding: 0;
+    box-shadow: none;
+    overflow: visible;
+    break-after: page;
+    page-break-after: always;
+  }
+  .mf-sheet:last-child {
+    break-after: auto;
+    page-break-after: auto;
+  }
+  .mf-sheet-no {
+    display: none;
+  }
+  .mf-sheet .mf-academic {
+    font-size: inherit;
+    line-height: inherit;
+  }
+  .mf-sheet-measure {
+    display: none !important;
+  }
+  .mf-sheet .mf-academic .katex {
+    font-size: 1.04em;
+  }
 }

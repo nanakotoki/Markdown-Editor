@@ -2,6 +2,7 @@ import { Decoration, EditorView, WidgetType, type DecorationSet } from '@codemir
 import { EditorState, RangeSetBuilder, StateField } from '@codemirror/state'
 import { scanMath } from '../../core/katexSafeRender'
 import { renderMarkdown } from '../../core/renderMarkdown'
+import { DIRECTIVE_CN, buildRefIndex, type NumberingConfig } from '../../core/numbering'
 
 /**
  * ============================================================================
@@ -58,6 +59,75 @@ class TableWidget extends WidgetType {
   }
 }
 
+/**
+ * 容器标签：把 `::: theorem` 直接显示成「定理 1.1」。
+ * 点一下就把光标放回这一行，恢复成可编辑的源码。
+ */
+class DirectiveLabel extends WidgetType {
+  constructor(readonly text: string, readonly from: number, readonly to: number) {
+    super()
+  }
+  eq(other: DirectiveLabel) {
+    return other.text === this.text && other.from === this.from
+  }
+  toDOM() {
+    const el = document.createElement('span')
+    el.className = 'cm-directive-label cm-directive-label-cn'
+    el.textContent = this.text
+    el.addEventListener('mousedown', (e) => {
+      const view = EditorView.findFromDOM(el as HTMLElement)
+      if (!view) return
+      e.preventDefault()
+      view.dispatch({ selection: { anchor: Math.min(view.state.doc.length, this.to) } })
+      view.focus()
+    })
+    return el
+  }
+  ignoreEvent() {
+    return true
+  }
+}
+
+/** 交叉引用：`\\ref{eq:a}` / `@eq:a` 显示成「式 1-1」，点开可改源码 */
+class RefChip extends WidgetType {
+  constructor(readonly text: string, readonly from: number, readonly to: number) {
+    super()
+  }
+  eq(other: RefChip) {
+    return other.text === this.text && other.from === this.from
+  }
+  toDOM() {
+    const el = document.createElement('span')
+    el.className = 'cm-ref-chip cm-ref-chip-cn'
+    el.textContent = this.text
+    el.title = '点击编辑引用源码'
+    el.addEventListener('mousedown', (e) => {
+      const view = EditorView.findFromDOM(el as HTMLElement)
+      if (!view) return
+      e.preventDefault()
+      view.dispatch({ selection: { anchor: Math.min(view.state.doc.length, this.to) } })
+      view.focus()
+    })
+    return el
+  }
+  ignoreEvent() {
+    return true
+  }
+}
+
+/** 手动分页：源码里一行 \newpage，内联模式下画成一条虚线 */
+class PageBreak extends WidgetType {
+  toDOM() {
+    const el = document.createElement('div')
+    el.className = 'cm-pagebreak'
+    el.innerHTML = '<span>分页</span>'
+    return el
+  }
+  ignoreEvent() {
+    return true
+  }
+}
+
 interface Item {
   from: number
   to: number
@@ -68,12 +138,13 @@ function overlaps(from: number, to: number, a: number, b: number): boolean {
   return a < to && b > from
 }
 
-function build(state: EditorState): DecorationSet {
+function build(state: EditorState, numbering: NumberingConfig): DecorationSet {
   const items: Item[] = []
   const doc = state.doc
   const sel = state.selection.main
   const text = doc.toString()
   const mathRanges = scanMath(text)
+  const refIndex = buildRefIndex(text, numbering)
 
   const inMath = (from: number, to: number) => mathRanges.some((r) => overlaps(from, to, r.from, r.to))
 
@@ -112,39 +183,39 @@ function build(state: EditorState): DecorationSet {
       items.push({ from: line.from, to: line.from + quote[0].length, deco: hide })
     }
 
-    // ::: 容器：隐藏标记，只留标签
+    // ::: 容器：隐藏标记，把英文环境名换成「定义 1.1」这样的中文标签
     if (/^:::/.test(raw)) {
-      const open = /^:::+\s*([A-Za-z][\w-]*)\s*(\[[^\]]*\])?\s*(\{[^}]*\})?\s*$/.exec(raw)
+      const open = /^:::+(\s*)([A-Za-z][\w-]*)\s*(\[[^\]]*\])?\s*(\{[^}]*\})?\s*$/.exec(raw)
       if (!lineTouched) {
         if (!open) {
           // 单独的闭合 ::: 整行折叠（光标进入该行时恢复源码）
-          if (!lineTouched) items.push({ from: line.from, to: line.to, deco: collapseLine })
+          items.push({ from: line.from, to: line.to, deco: collapseLine })
         } else {
-          const markerLen = raw.length - raw.replace(/^:::+\s*/, '').length
+          const markerLen = open[0].length - open[0].replace(/^:::+/g, '').length
           items.push({ from: line.from, to: line.from + markerLen, deco: hide })
-          const attr = /\{[^}]*\}\s*$/.exec(raw)
-          const bodyFrom = line.from + markerLen
-          const bodyTo = attr ? line.from + attr.index : line.to
-          const body = raw.slice(markerLen, attr ? attr.index : raw.length)
-          // `::: theorem [拉格朗日中值定理]` —— 方括号隐藏，只给标题加标签样式
-          const title = /\[([^\]\n]*)\]\s*$/.exec(body)
-          if (title && title.index > 0) {
-            const titleFrom = bodyFrom + title.index
-            const nameEnd = bodyFrom + body.slice(0, title.index).trimEnd().length
-            const innerFrom = titleFrom + 1
-            const innerTo = titleFrom + title[0].trimEnd().length - 1
-            const labelDeco = Decoration.mark({ class: 'cm-directive-label' })
-            if (nameEnd > bodyFrom) items.push({ from: bodyFrom, to: nameEnd, deco: labelDeco })
-            items.push({ from: nameEnd, to: innerFrom, deco: hide })
-            if (innerTo > innerFrom) items.push({ from: innerFrom, to: innerTo, deco: labelDeco })
-            if (bodyTo > innerTo) items.push({ from: innerTo, to: bodyTo, deco: hide })
+
+          const nameFrom = line.from + open[0].indexOf(open[2])
+          const nameTo = nameFrom + open[2].length
+          const cn = DIRECTIVE_CN[open[2].toLowerCase()]
+          if (cn) {
+            const label = refIndex.containers.get(line.from) ?? cn
+            items.push({ from: nameFrom, to: nameTo, deco: Decoration.replace({ widget: new DirectiveLabel(label, nameFrom, nameTo) }) })
           } else {
-            const nameEnd = bodyFrom + body.trimEnd().length
-            items.push({ from: bodyFrom, to: nameEnd, deco: Decoration.mark({ class: 'cm-directive-label' }) })
-            if (nameEnd < bodyTo) items.push({ from: nameEnd, to: bodyTo, deco: hide })
+            items.push({ from: nameFrom, to: nameTo, deco: Decoration.mark({ class: 'cm-directive-label' }) })
           }
-          if (attr) {
-            items.push({ from: line.from + attr.index, to: line.to, deco: hide })
+
+          // 标题 [xxx]：只隐藏方括号，标题本身加样式
+          if (open[3]) {
+            const tFrom = line.from + open[0].indexOf(open[3])
+            const inner = open[3].slice(1, -1)
+            items.push({ from: tFrom, to: tFrom + 1, deco: hide })
+            if (inner) items.push({ from: tFrom + 1, to: tFrom + 1 + inner.length, deco: Decoration.mark({ class: 'cm-directive-label' }) })
+            items.push({ from: tFrom + 1 + inner.length, to: tFrom + open[3].length, deco: hide })
+          }
+          // {#thm:xxx} 属性整段隐藏
+          if (open[4]) {
+            const aFrom = line.from + open[0].indexOf(open[4])
+            items.push({ from: aFrom, to: aFrom + open[4].length, deco: hide })
           }
         }
       }
@@ -172,15 +243,46 @@ function build(state: EditorState): DecorationSet {
       }
     }
 
-    // 交叉引用 @kind:id 与文献引用 [@key]：源码保持可编辑，但给出可读的胶囊样式
-    const refRe = /@(?:thm|eq|fig|tab|alg|sec|def|lem|cor|prop|ex):[A-Za-z0-9_\u4e00-\u9fa5-]+/g
+    // 手动分页：整行换成分页标记
+    if (/^\s*\\(newpage|pagebreak|clearpage)\s*$/.test(raw) && !lineTouched) {
+      items.push({ from: line.from, to: line.to, deco: Decoration.replace({ block: true, widget: new PageBreak() }) })
+      continue
+    }
+
+    // 交叉引用：\ref{} / \eqref{} / @kind:id —— 能解析出编号就显示成「式 1-1」
+    const texRefRe = /\\(?:eq|c|auto|page)?ref\*?\{([^{}\n]+)\}/g
     let rm: RegExpExecArray | null
-    while ((rm = refRe.exec(raw))) {
+    while ((rm = texRefRe.exec(raw))) {
       const start = line.from + rm.index
       const end = start + rm[0].length
       if (inMath(start, end)) continue
-      items.push({ from: start, to: end, deco: Decoration.mark({ class: 'cm-ref-chip' }) })
+      const key = rm[1].trim()
+      const label = refIndex.refs.get(key) ?? refIndex.refs.get(key.replace(/^[a-z]+:/, ''))
+      // 包含边界：点开胶囊时选区正落在区间末尾，必须算「碰到」
+      const touched = sel.from <= end && sel.to >= start
+      const deco =
+        label && !touched
+          ? Decoration.replace({ widget: new RefChip(label, start, end) })
+          : Decoration.mark({ class: 'cm-ref-chip' })
+      items.push({ from: start, to: end, deco })
     }
+
+    const atRefRe = /@(?:thm|eq|fig|tab|alg|sec|def|lem|cor|prop|exa|ex):[A-Za-z0-9_\u4e00-\u9fa5-]+/g
+    while ((rm = atRefRe.exec(raw))) {
+      const start = line.from + rm.index
+      const end = start + rm[0].length
+      if (inMath(start, end)) continue
+      const key = rm[0].slice(1)
+      const label = refIndex.refs.get(key) ?? refIndex.refs.get(key.replace(/^[a-z]+:/, ''))
+      // 包含边界：点开胶囊时选区正落在区间末尾，必须算「碰到」
+      const touched = sel.from <= end && sel.to >= start
+      const deco =
+        label && !touched
+          ? Decoration.replace({ widget: new RefChip(label, start, end) })
+          : Decoration.mark({ class: 'cm-ref-chip' })
+      items.push({ from: start, to: end, deco })
+    }
+
     const citeRe = /\[@[^\]\n]{1,120}\]/g
     while ((rm = citeRe.exec(raw))) {
       const start = line.from + rm.index
@@ -201,11 +303,11 @@ function build(state: EditorState): DecorationSet {
   return builder.finish()
 }
 
-export function markdownPreviewPlugin() {
+export function markdownPreviewPlugin(getNumbering: () => NumberingConfig = () => ({ thm: 'section', eq: 'global', eqTag: 'paren' })) {
   return StateField.define<DecorationSet>({
-    create: (state) => build(state),
+    create: (state) => build(state, getNumbering()),
     update(value, tr) {
-      if (tr.docChanged || tr.selection) return build(tr.state)
+      if (tr.docChanged || tr.selection) return build(tr.state, getNumbering())
       return value.map(tr.changes)
     },
     provide: (f) => EditorView.decorations.from(f),
