@@ -103,9 +103,20 @@ await run(
 )
 
 // ---------------------------------------------------------------- 归档
-const produced = (await fs.readdir(BUILD_DIR)).filter((f) => f.toLowerCase().endsWith('.exe'))
+// 只认本次版本：build 目录不会自动清空，旧版本 exe 常残留在这里，
+// 早先按前缀匹配会捞到上一次的 1.0.4，把新包归档成旧包。
+const produced = (await fs.readdir(BUILD_DIR)).filter(
+  (f) => f.toLowerCase().endsWith('.exe') && f.includes(VERSION)
+)
 const setup = produced.find((f) => /^MathFlow-Setup-/.test(f))
 const portable = produced.find((f) => /Portable/i.test(f))
+
+if (targets.includes('nsis') && !setup) {
+  throw new Error(`没有找到 MathFlow-Setup-${VERSION}.exe，检查 electron-builder 输出`)
+}
+if (targets.includes('portable') && !portable) {
+  throw new Error(`没有找到 MathFlow-Portable-${VERSION}.exe，检查 electron-builder 输出`)
+}
 
 await fs.mkdir(OUT_SETUP, { recursive: true })
 await fs.mkdir(OUT_PORTABLE, { recursive: true })
