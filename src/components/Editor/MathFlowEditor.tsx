@@ -13,7 +13,9 @@ import { refCompletion } from './cmRefCompletion'
 import FloatingMathHUD from './FloatingMathHUD'
 import { editorBridge } from '../../store/editorBridge'
 import { renderMathSafely, mathRangeAt, type MacroMap } from '../../core/katexSafeRender'
-import type { RefEntry } from '../../core/renderMarkdown'
+import { renderMarkdown, type RefEntry } from '../../core/renderMarkdown'
+import { computePageBreakLines } from '../../core/pageBreaks'
+import { autoPageField, setPageBreakLines } from './cmAutoPage'
 import type { BibEntry } from '../../store/useEditorStore'
 import { useEditorStore } from '../../store/useEditorStore'
 
@@ -127,6 +129,62 @@ export default function MathFlowEditor({
     return { thm: st.thmNumbering, eq: st.eqNumbering, eqTag: st.eqTagStyle } as const
   }, [])
 
+  /**
+   * 自动分页提示：停笔后用 A4 量尺量一次「PDF 会在第几行换页」。
+   * 放在空闲时算，且只在内容/排版参数变化后重算，不跟着每次按键走。
+   */
+  const pageTimer = useRef<number | null>(null)
+  const schedulePageBreaks = useCallback(() => {
+    if (pageTimer.current) window.clearTimeout(pageTimer.current)
+    pageTimer.current = window.setTimeout(() => {
+      const run = () => {
+        const view = viewRef.current
+        if (!view) return
+        const st = useEditorStore.getState().settings
+        try {
+          const res = renderMarkdown(view.state.doc.toString(), {
+            macros: getMacros(),
+            bib: getBib(),
+            autoNumber: st.autoNumberEquations,
+            citationStyle: st.citationStyle,
+            extRefs: getRefs(),
+            numbering: { thm: st.thmNumbering, eq: st.eqNumbering, eqTag: st.eqTagStyle },
+            qed: st.qedSymbol,
+          })
+          view.dispatch({ effects: setPageBreakLines.of(computePageBreakLines(res.html)) })
+        } catch {
+          /* 渲染失败就保留上一批分页线，不打断编辑 */
+        }
+      }
+      const ric = (window as unknown as { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number })
+        .requestIdleCallback
+      if (ric) ric(run, { timeout: 1200 })
+      else run()
+    }, 600)
+  }, [getMacros, getBib, getRefs])
+
+  /** 排版参数变了（字号、行距、容器样式），分页位置也会变 */
+  const layoutSignature = useEditorStore((s) =>
+    [
+      s.settings.previewFont,
+      s.settings.previewFontCustom,
+      s.settings.previewFontSize,
+      s.settings.previewLineHeight,
+      s.settings.previewWeight,
+      s.settings.thmStyle,
+      s.settings.thmBodyKai,
+      s.settings.mathStyle,
+      s.settings.qedSymbol,
+      s.settings.thmNumbering,
+      s.settings.eqNumbering,
+      s.settings.eqTagStyle,
+    ].join('|')
+  )
+
+  useEffect(() => {
+    schedulePageBreaks()
+  }, [layoutSignature, schedulePageBreaks])
+
   /** 折叠 / 展开公式工作台，并记住这次的选择 */
   const toggleHudCollapsed = useCallback(() => {
     setHudCollapsed((v) => {
@@ -212,6 +270,7 @@ export default function MathFlowEditor({
             },
           },
         ]),
+        autoPageField,
         mathCompartment.of(plain ? [] : [...mathRenderPlugin(() => getMacros(), getNumbering), markdownPreviewPlugin(getNumbering), markdownSmartInput()]),
         snippetExtensions({
           onAskAI: () => {
@@ -227,6 +286,7 @@ export default function MathFlowEditor({
           if (u.docChanged) {
             if (timerRef.current) window.clearTimeout(timerRef.current)
             timerRef.current = window.setTimeout(flush, 160)
+            schedulePageBreaks()
           }
           if (u.docChanged || u.selectionSet || u.focusChanged) syncHud(u.view)
         }),
@@ -258,9 +318,12 @@ export default function MathFlowEditor({
     const view = new EditorView({ state, parent: hostRef.current })
     viewRef.current = view
     syncHud(view)
+    // 首次进入就要有分页线，不用等用户敲第一个字
+    schedulePageBreaks()
 
     return () => {
       if (timerRef.current) window.clearTimeout(timerRef.current)
+      if (pageTimer.current) window.clearTimeout(pageTimer.current)
       view.destroy()
       viewRef.current = null
     }

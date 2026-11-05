@@ -119,6 +119,32 @@ export const DIRECTIVE_CN: Record<string, string> = {
   algorithm: '算法',
 }
 
+/** 英文文档里的标签（Theorem 1.1 / Definition 1.1 …） */
+export const DIRECTIVE_EN: Record<string, string> = {
+  theorem: 'Theorem',
+  lemma: 'Lemma',
+  definition: 'Definition',
+  proposition: 'Proposition',
+  corollary: 'Corollary',
+  example: 'Example',
+  remark: 'Remark',
+  proof: 'Proof',
+  algorithm: 'Algorithm',
+}
+
+/**
+ * 判断一段正文是不是英文写的。
+ * 判据刻意宽松：没有 CJK 字符、拉丁字母够多就算英文；
+ * 中文讲义里夹 the / if 这类词不会误判（CJK 占比仍高）。
+ */
+export function isEnglishText(raw: string): boolean {
+  const text = raw.replace(/<[^>]*>/g, ' ')
+  const cjk = (text.match(/[\u3400-\u9fff]/g) ?? []).length
+  const latin = (text.match(/[A-Za-z]/g) ?? []).length
+  if (cjk === 0 && latin > 0) return true
+  return latin > 12 && latin > cjk * 8
+}
+
 /** 容器名 → 引用前缀（def / thm / ...），与 renderMarkdown 的 RefKind 对齐 */
 export const DIRECTIVE_KIND: Record<string, string> = {
   theorem: 'thm',
@@ -150,6 +176,9 @@ export function buildRefIndex(
   const refs = new Map<string, string>()
   const containers = new Map<number, string>()
   const depth = sectionDepthOf(text)
+  // 整篇是英文的话，内联预览里的标签与引用也跟着换英文，别一边 Theorem 一边「定理」
+  const EN = isEnglishText(text)
+  const eqPrefix = EN ? 'Eq.' : '式'
   const sectionRe = depth === 1 ? /^#\s/ : /^#{2}\s/
   const thmCounters = new Map<string, number>()
   const eqPerSection = new Map<number, number>()
@@ -164,8 +193,8 @@ export function buildRefIndex(
 
   const flushMath = () => {
     if (mathLabel) {
-      refs.set(`eq:${mathLabel}`, `式 ${eqTagText(mathSection, mathSeq, cfg.eq, cfg.eqTag)}`)
-      refs.set(mathLabel, `式 ${eqTagText(mathSection, mathSeq, cfg.eq, cfg.eqTag)}`)
+      refs.set(`eq:${mathLabel}`, `${eqPrefix} ${eqTagText(mathSection, mathSeq, cfg.eq, cfg.eqTag)}`)
+      refs.set(mathLabel, `${eqPrefix} ${eqTagText(mathSection, mathSeq, cfg.eq, cfg.eqTag)}`)
     }
     mathLabel = null
   }
@@ -214,7 +243,7 @@ export function buildRefIndex(
       if (cn && name !== 'proof' && name !== 'remark') {
         const n = (thmCounters.get(name) ?? 0) + 1
         thmCounters.set(name, n)
-        const label = thmLabel(cn, sec, n, cfg.thm)
+        const label = thmLabel(EN ? DIRECTIVE_EN[name] ?? cn : cn, sec, n, cfg.thm)
         containers.set(lineStart, label)
         const id = (open[3] || '').trim()
         if (id) {
@@ -222,9 +251,10 @@ export function buildRefIndex(
           refs.set(id.replace(/^[a-z]+:/, ''), label)
         }
       } else if (cn) {
-        containers.set(lineStart, cn)
+        const label = EN ? DIRECTIVE_EN[name] ?? cn : cn
+        containers.set(lineStart, label)
         const id = (open[3] || '').trim()
-        if (id) refs.set(id.includes(':') ? id : `${kind}:${id}`, cn)
+        if (id) refs.set(id.includes(':') ? id : `${kind}:${id}`, label)
       }
     }
   }

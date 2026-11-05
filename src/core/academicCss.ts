@@ -38,11 +38,11 @@ h3.mf-heading{font-size:1.12em}
 .mf-img{max-width:100%}
 .mf-hr{border:none;border-top:1px solid #e6e9ef;margin:1.8em 0}
 .mf-display{margin:.9em 0;overflow-x:auto;overflow-y:hidden}
-.mf-display .katex-display{margin:.45em 0}
-.mf-eq{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;width:100%;max-width:100%}
+.mf-display .katex-display{margin:.45em auto}
+.mf-eq{display:block;position:relative;width:100%;max-width:100%}
 .mf-eq-body{min-width:0;overflow-x:auto;overflow-y:hidden;padding:2px 0}
-.mf-eq-body>.katex-display{width:fit-content;margin-left:auto;margin-right:auto}
-.mf-eq-no{flex:none;padding-left:1.4em;font-family:var(--mf-serif);font-size:1.08em;line-height:1;white-space:nowrap;align-self:center;color:#1f2937}
+.mf-eq-body>.katex-display{width:fit-content;max-width:calc(100% - 6.6em);margin-left:auto;margin-right:auto;overflow-x:auto;overflow-y:hidden}
+.mf-eq-no{position:absolute;right:0;top:50%;transform:translateY(-50%);padding-left:1.2em;font-family:var(--mf-serif);font-size:1.08em;line-height:1;white-space:nowrap;color:#1f2937}
 .mf-eq-tag{color:inherit;text-decoration:none}
 .mf-eq-tag:hover{color:var(--mf-accent)}
 .mf-eq-body .katex-display>.katex>.katex-html{display:flex;align-items:center;justify-content:center}
@@ -56,10 +56,10 @@ h3.mf-heading{font-size:1.12em}
 /* ---------- 定理 / 定义 / 证明 ---------- */
 .mf-thm{margin:1.15em 0;padding:10px 16px;border-left:3px solid #c6ccd8;background:#fafbfc;border-radius:0 8px 8px 0;
 break-inside:avoid;display:flow-root;--mf-thm-tint:#eef4ff;--mf-thm-line:#c6ccd8}
-.mf-thm-head{font-family:var(--mf-sans);font-size:.94em;font-weight:700;letter-spacing:.01em;margin-bottom:.28em;color:#1a3673}
-.mf-thm-label{font-family:var(--mf-sans);font-weight:700;color:inherit}
-.mf-thm-title{font-family:var(--mf-sans);font-weight:600;color:#2f3846}
-.mf-thm-body{font-family:var(--mf-thm-body-font,var(--mf-kai));font-size:.985em;line-height:1.85}
+.mf-thm-head{font-family:var(--mf-sans);font-size:1em;font-weight:800;letter-spacing:.01em;margin-bottom:.28em;color:#000}
+.mf-thm-label{font-family:var(--mf-sans);font-weight:800;color:inherit}
+.mf-thm-title{font-family:var(--mf-sans);font-weight:800;color:#000}
+.mf-thm-body{font-family:var(--mf-thm-body-font,var(--mf-kai));font-size:1em;line-height:1.85}
 .mf-thm-body>.mf-p:first-child{margin-top:.1em}
 .mf-thm-body>.mf-p:last-child{margin-bottom:.1em}
 .mf-thm-theorem{--mf-thm-tint:#dbe6ff;--mf-thm-line:#3b6ef0;border-left-color:#3b6ef0;background:#f6f9ff}
@@ -67,18 +67,25 @@ break-inside:avoid;display:flow-root;--mf-thm-tint:#eef4ff;--mf-thm-line:#c6ccd8
 .mf-thm-lemma,.mf-thm-proposition,.mf-thm-corollary{--mf-thm-tint:#ece4ff;--mf-thm-line:#8b5cf6;border-left-color:#8b5cf6;background:#faf8ff}
 .mf-thm-example{--mf-thm-tint:#d5f7e8;--mf-thm-line:#10b981;border-left-color:#10b981;background:#f5fdf9}
 .mf-thm-remark{--mf-thm-tint:#eceff4;--mf-thm-line:#94a3b8;border-left-color:#94a3b8;background:#fbfbfc}
-.mf-thm-inline-label{font-family:var(--mf-sans);font-weight:700;margin-right:.4em;color:#475569}
+.mf-thm-inline-label{font-family:var(--mf-sans);font-weight:800;margin-right:.4em;color:#000}
 .mf-proof{border-left-color:#94a3b8;background:#fbfbfc}
 .mf-proof .mf-thm-body{font-family:var(--mf-thm-body-font,var(--mf-kai))}
-.mf-proof-q{float:left;margin-right:.3em;font-family:var(--mf-kai);font-weight:700;color:#334155;line-height:1.85;text-indent:0}
+.mf-proof-q{float:left;margin-right:.3em;font-family:var(--mf-kai);font-weight:800;color:#000;line-height:1.85;text-indent:0}
 .mf-proof .mf-thm-body>.mf-p:first-child{text-indent:0}
 .mf-proof-title{font-family:var(--mf-sans);font-size:.92em;color:#64748b}
-.mf-qed{display:inline-block;margin-left:.45em;color:#334155;font-size:.95em;line-height:1;white-space:nowrap}
+.mf-qed{display:inline-block;margin-left:.45em;color:#000;font-size:.95em;line-height:1;white-space:nowrap}
+/* 英文文档：标签与 Proof 粗黑体，定理正文斜体，证明正体 */
+.mf-thm-en .mf-thm-body{font-family:var(--mf-serif);font-style:italic}
+.mf-thm-en .mf-thm-body .katex,.mf-thm-en .mf-thm-body .katex-display,.mf-thm-en .mf-thm-body .mf-eq{font-style:normal}
+.mf-thm-en.mf-proof .mf-thm-body,.mf-thm-en.mf-thm-remark .mf-thm-body{font-style:normal}
+.mf-thm-en .mf-proof-q{font-family:var(--mf-serif);font-style:normal;font-weight:800;color:#000}
+.mf-thm-en .mf-thm-inline-label{color:#000}
+.mf-thm-en .mf-qed{font-style:normal}
 .mf-box{margin:1em 0;padding:10px 14px;background:#f8f9fb;border:1px dashed #dfe3ea;border-radius:8px;display:flow-root}
 .mf-box-title{font-family:var(--mf-sans);font-weight:700;font-size:.92em;margin-bottom:4px}
 :root[data-thm-style='beamer'] .mf-thm{padding:0;border:none;border-radius:10px;background:#fff;
 box-shadow:0 1px 2px rgba(20,26,35,.05),0 10px 24px -18px rgba(20,26,35,.45);overflow:hidden}
-:root[data-thm-style='beamer'] .mf-thm-head{background:var(--mf-thm-tint);color:#16305f;padding:7px 15px;margin:0}
+:root[data-thm-style='beamer'] .mf-thm-head{background:var(--mf-thm-tint);color:#000;padding:7px 15px;margin:0}
 :root[data-thm-style='beamer'] .mf-thm-body{padding:8px 15px 12px}
 :root[data-thm-style='beamer'] .mf-proof{background:#fff;box-shadow:0 1px 2px rgba(20,26,35,.05)}
 :root[data-thm-style='beamer'] .mf-proof .mf-thm-body{padding-top:10px}

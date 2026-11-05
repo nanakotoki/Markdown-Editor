@@ -1,4 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { SHEET, paginateBlocks } from '../../core/pagination'
+
+export { SHEET }
 
 /**
  * ============================================================================
@@ -8,16 +11,10 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
  *  逐个量出顶层块的位置，再按「块不能跨页」的规则切成若干页，最后把每页
  *  单独渲染成一张纸。手动分页符（\newpage）直接断页。
  *
- *  这样屏幕上看到的分页位置就是打印/导出 PDF 后的分页位置，
- *  写笔记时不用猜「这一段会不会被切断」。
+ *  切页规则放在 core/pagination.ts，编辑器里的自动分页提示用的是同一套，
+ *  两边必须算出同样的页数，否则「屏幕上第 2 页」和「PDF 第 2 页」会对不上。
  * ============================================================================
  */
-
-/** A4 版心：210mm - 18mm×2 = 174mm ≈ 658px；297mm - 20mm×2 = 257mm ≈ 971px */
-export const SHEET = { width: 794, height: 1123, padX: 68, padY: 76 }
-const CONTENT_H = SHEET.height - SHEET.padY * 2
-/** 留一点余量，避免最后一行贴着页脚 */
-const SAFE_H = CONTENT_H - 18
 
 export interface PaginatedSheetsProps {
   html: string
@@ -45,38 +42,7 @@ export default function PaginatedSheets({ html, signature, onPages, pageNumbers 
       return
     }
 
-    const out: string[][] = []
-    let cur: string[] = []
-    let pageTop = kids[0].offsetTop
-
-    const flush = () => {
-      out.push(cur)
-      cur = []
-    }
-
-    for (let i = 0; i < kids.length; i++) {
-      const el = kids[i]
-      if (el.hasAttribute('data-mf-pagebreak')) {
-        flush()
-        pageTop = el.offsetTop
-        continue
-      }
-      const top = el.offsetTop
-      const bottom = top + el.offsetHeight
-      const isHeading = /^H[1-6]$/.test(el.tagName)
-      const next = kids[i + 1]
-      const nextBottom = next && !next.hasAttribute('data-mf-pagebreak') ? next.offsetTop + next.offsetHeight : bottom
-
-      // 放不下就换页；标题还要看下一段——避免标题孤零零留在页尾
-      const overflow = bottom - pageTop > SAFE_H
-      const orphanHeading = isHeading && nextBottom - pageTop > SAFE_H && cur.length > 0
-      if ((overflow || orphanHeading) && cur.length > 0) {
-        flush()
-        pageTop = top
-      }
-      cur.push(el.outerHTML)
-    }
-    flush()
+    const out = paginateBlocks(kids).map((idxs) => idxs.map((i) => kids[i].outerHTML))
     setPages(out)
     onPages?.(out.length)
   }

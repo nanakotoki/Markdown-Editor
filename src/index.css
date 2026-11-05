@@ -160,6 +160,26 @@ body {
   letter-spacing: 0.08em;
 }
 
+/* 自动分页（按 A4 排版算出来的位置）：比手动分页更淡，
+   只提示「PDF 会在这里翻页」，不是可以删掉的源码 */
+.cm-autopage {
+  position: relative;
+  height: 0;
+  margin: 0;
+  border-top: 1px dashed #dbe1ea;
+  pointer-events: none;
+}
+.cm-autopage > span {
+  position: absolute;
+  right: 2px;
+  top: -9px;
+  padding: 0 5px;
+  background: #fff;
+  font: 500 9.5px var(--mf-sans);
+  color: #b6bfcd;
+  letter-spacing: 0.04em;
+}
+
 /* 折叠的 `:::` 闭合行：不占高度 */
 .cm-collapsed-mark {
   display: none;
@@ -386,15 +406,17 @@ body {
   transition: background 0.25s ease;
 }
 .mf-academic .mf-display .katex-display {
-  margin: 0.45em 0;
+  /* 左右必须是 auto：写成 `0.45em 0` 会把 .mf-eq-body 的居中 margin 覆盖掉，
+     编号公式于是贴到左边（这个坑踩过一次）。 */
+  margin: 0.45em auto;
 }
 
 /* 公式编号独立成列（见 katexSafeRender.wrapEquationNumber）。
-   公式列可横向滚动，编号列永远可见，不会互相压盖。 */
+   公式按「版心」居中：编号绝对定位到右侧，不占公式的居中基准，
+   否则公式会在「扣掉编号宽度」的区域里居中，看上去整体偏左。 */
 .mf-eq {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
+  display: block;
+  position: relative;
   width: 100%;
   max-width: 100%;
 }
@@ -407,18 +429,25 @@ body {
 }
 .mf-eq-body > .katex-display {
   width: fit-content;
+  /* 给右侧编号留出位置：公式一旦贴到编号上就读不清了，
+     超宽时让这条式子自己横向滚动，而不是压到编号底下 */
+  max-width: calc(100% - 6.6em);
   margin-left: auto;
   margin-right: auto;
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 .mf-eq-no {
-  flex: none;
-  padding-left: 1.4em;
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  padding-left: 1.2em;
   font-family: var(--mf-serif);
   font-size: 0.95em;
   line-height: 1;
   white-space: nowrap;
   color: var(--mf-ink);
-  align-self: center;
 }
 
 /* 手写 \tag{} 的兜底：把 KaTeX 的绝对定位编号改成流内元素 */
@@ -531,25 +560,26 @@ body {
 }
 .mf-thm-head {
   font-family: var(--mf-sans);
-  font-size: 0.94em;
-  font-weight: 700;
+  /* 与正文同字号：标题只靠字重和纯黑来立住，不靠变大 */
+  font-size: 1em;
+  font-weight: 800;
   letter-spacing: 0.01em;
   margin-bottom: 0.28em;
-  color: #1a3673;
+  color: #000;
 }
 .mf-thm-label {
   font-family: var(--mf-sans);
-  font-weight: 700;
+  font-weight: 800;
   color: inherit;
 }
 .mf-thm-title {
   font-family: var(--mf-sans);
-  font-weight: 600;
-  color: #2f3846;
+  font-weight: 800;
+  color: #000;
 }
 .mf-thm-body {
   font-family: var(--mf-thm-body-font, var(--mf-kai));
-  font-size: 0.985em;
+  font-size: 1em;
   line-height: 1.85;
 }
 .mf-thm-body > .mf-p:first-child {
@@ -593,9 +623,9 @@ body {
 }
 .mf-thm-inline-label {
   font-family: var(--mf-sans);
-  font-weight: 700;
+  font-weight: 800;
   margin-right: 0.4em;
-  color: #475569;
+  color: #000;
 }
 
 /* 证明：楷体，行首「证」+ 段末证毕符号，符号留在框内 */
@@ -610,8 +640,8 @@ body {
   float: left;
   margin-right: 0.3em;
   font-family: var(--mf-kai);
-  font-weight: 700;
-  color: #334155;
+  font-weight: 800;
+  color: #000;
   line-height: 1.85;
   text-indent: 0;
 }
@@ -627,7 +657,7 @@ body {
 .mf-qed {
   display: inline-block;
   margin-left: 0.45em;
-  color: #334155;
+  color: #000;
   font-size: 0.95em;
   line-height: 1;
   vertical-align: baseline;
@@ -635,6 +665,34 @@ body {
 }
 .mf-academic .mf-thm-proof .mf-thm-label::after {
   content: '：';
+}
+
+/* --- 英文文档：标签与 Proof 用粗黑体，定理正文斜体，证明正文正体 --- */
+.mf-thm-en .mf-thm-body {
+  font-family: var(--mf-serif);
+  font-style: italic;
+}
+/* 公式本身不跟着斜一次（KaTeX 内部自己管字形） */
+.mf-thm-en .mf-thm-body .katex,
+.mf-thm-en .mf-thm-body .katex-display,
+.mf-thm-en .mf-thm-body .mf-eq {
+  font-style: normal;
+}
+.mf-thm-en.mf-proof .mf-thm-body,
+.mf-thm-en.mf-thm-remark .mf-thm-body {
+  font-style: normal;
+}
+.mf-thm-en .mf-proof-q {
+  font-family: var(--mf-serif);
+  font-style: normal;
+  font-weight: 800;
+  color: #000;
+}
+.mf-thm-en .mf-thm-inline-label {
+  color: #000;
+}
+.mf-thm-en .mf-qed {
+  font-style: normal;
 }
 
 /* --- beamer：圆角卡片 + 色块标题 --- */
@@ -648,7 +706,7 @@ body {
 }
 :root[data-thm-style='beamer'] .mf-thm-head {
   background: var(--mf-thm-tint);
-  color: #16305f;
+  color: #000;
   padding: 7px 15px;
   margin: 0;
 }

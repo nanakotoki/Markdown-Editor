@@ -8,6 +8,7 @@ import { escapeHtml, renderMathSafely } from './katexSafeRender'
 import {
   DEFAULT_NUMBERING,
   eqTagText,
+  isEnglishText,
   thmLabel,
   type EqNumbering,
   type EqTagStyle,
@@ -84,17 +85,22 @@ export interface RenderOptions {
   qed?: string
 }
 
-const THM_TYPES: Record<string, { cn: string; kind: RefKind; env: string }> = {
-  theorem: { cn: '定理', kind: 'thm', env: 'theorem' },
-  lemma: { cn: '引理', kind: 'lem', env: 'lemma' },
-  definition: { cn: '定义', kind: 'def', env: 'definition' },
-  proposition: { cn: '命题', kind: 'prop', env: 'proposition' },
-  corollary: { cn: '推论', kind: 'cor', env: 'corollary' },
-  example: { cn: '例题', kind: 'exa', env: 'example' },
-  remark: { cn: '注', kind: 'prf', env: 'remark' },
-  proof: { cn: '证明', kind: 'prf', env: 'proof' },
-  algorithm: { cn: '算法', kind: 'alg', env: 'algorithm' },
+const THM_TYPES: Record<string, { cn: string; en: string; kind: RefKind; env: string }> = {
+  theorem: { cn: '定理', en: 'Theorem', kind: 'thm', env: 'theorem' },
+  lemma: { cn: '引理', en: 'Lemma', kind: 'lem', env: 'lemma' },
+  definition: { cn: '定义', en: 'Definition', kind: 'def', env: 'definition' },
+  proposition: { cn: '命题', en: 'Proposition', kind: 'prop', env: 'proposition' },
+  corollary: { cn: '推论', en: 'Corollary', kind: 'cor', env: 'corollary' },
+  example: { cn: '例题', en: 'Example', kind: 'exa', env: 'example' },
+  remark: { cn: '注', en: 'Remark', kind: 'prf', env: 'remark' },
+  proof: { cn: '证明', en: 'Proof', kind: 'prf', env: 'proof' },
+  algorithm: { cn: '算法', en: 'Algorithm', kind: 'alg', env: 'algorithm' },
 }
+
+/**
+ * 容器内容是不是英文（判据见 numbering.isEnglishText）。
+ * 英文文档按 “Theorem 1.1 + 斜体正文 + Proof.” 排，中文按讲义习惯排。
+ */
 
 const REF_PREFIX_CN: Record<string, string> = {
   eq: '式', thm: '定理', lem: '引理', def: '定义', prop: '命题',
@@ -205,6 +211,8 @@ interface Ctx extends Required<Pick<RenderOptions, 'macros'>> {
   externalRefLinks: boolean
   /** 「定理 1.1」这类自然语言提及 -> 引用条目，用于自动加链接 */
   mentionIndex: Map<string, RefEntry>
+  /** 整篇语言：决定引用前缀用「式/定理」还是 Eq./Theorem */
+  lang: 'zh' | 'en'
 }
 
 export function renderMarkdown(md: string, opts: RenderOptions = {}): RenderResult {
@@ -237,6 +245,8 @@ export function renderMarkdown(md: string, opts: RenderOptions = {}): RenderResu
     extRefs: opts.extRefs ?? [],
     externalRefLinks: opts.externalRefLinks ?? false,
     mentionIndex: new Map(),
+    // 整篇的语言决定公式/定理引用显示成「式 1」「定理 1.1」还是 “Eq. (1)”“Theorem 1.1”
+    lang: isEnglishText(md) ? 'en' : 'zh',
   }
 
   // 第一遍：为公式/定理/算法/标题分配编号与 id（保证交叉引用可以前向引用）
@@ -343,7 +353,7 @@ function collect(tree: any, ctx: Ctx) {
           kind: 'eq',
           id: bareId(label),
           anchor,
-          label: `式 ${tag}`,
+          label: `${ctx.lang === 'en' ? 'Eq.' : '式'} ${tag}`,
           detail: truncate(cleanLatex(node.value ?? ''), 48),
         })
       }
@@ -358,8 +368,9 @@ function collect(tree: any, ctx: Ctx) {
         const section = Math.max(1, ctx.sectionNo)
         if (meta.env === 'proof' || meta.env === 'remark') {
           if (id) {
-            ctx.thmMeta.set(id, { label: meta.cn, previewHtml: '' })
-            ctx.refs.push({ kind: meta.kind, id: bareId(id), anchor: anchorOf(id), label: meta.cn, detail: title || meta.cn })
+            const label = ctx.lang === 'en' ? meta.en : meta.cn
+            ctx.thmMeta.set(id, { label, previewHtml: '' })
+            ctx.refs.push({ kind: meta.kind, id: bareId(id), anchor: anchorOf(id), label, detail: title || label })
           }
         } else {
           const key = meta.env
@@ -367,7 +378,7 @@ function collect(tree: any, ctx: Ctx) {
           const n = ctx.thmCounters[key]
           node.data = { ...(node.data ?? {}), mfThmNo: n, mfThmSection: section }
           if (id) {
-            const label = thmLabel(meta.cn, section, n, ctx.numbering.thm)
+            const label = thmLabel(ctx.lang === 'en' ? meta.en : meta.cn, section, n, ctx.numbering.thm)
             ctx.thmMeta.set(id, { label, previewHtml: '' })
             ctx.refs.push({
               kind: meta.kind,
@@ -396,7 +407,7 @@ function collect(tree: any, ctx: Ctx) {
           kind: 'alg',
           id: bareId(info.id),
           anchor: anchorOf(info.id),
-          label: `算法 ${ctx.algCounter}`,
+          label: `${ctx.lang === 'en' ? 'Algorithm' : '算法'} ${ctx.algCounter}`,
           detail: info.title ? `· ${info.title}` : '',
         })
       }
@@ -598,14 +609,20 @@ function renderContainer(node: any, ctx: Ctx): string {
     return `<div class="mf-box mf-box-generic">${title ? `<div class="mf-box-title">${escapeHtml(title)}</div>` : ''}${inner}</div>`
   }
 
+  // 英文文档：标签用 Theorem / Lemma…，正文斜体，证明用 Proof. + 正体
+  const en = isEnglishText(`${title ?? ''} ${inner}`)
+  const langClass = en ? ' mf-thm-en' : ''
+
   if (meta.env === 'proof') {
     if (id) {
       const m = ctx.thmMeta.get(id)
       if (m) m.previewHtml = inner
     }
-    return `<div class="mf-thm mf-proof"${id ? ` id="${anchorOf(id)}"` : ''}>
-      <div class="mf-thm-body"><span class="mf-proof-q">证</span>${
-        title ? `<span class="mf-proof-title">（${escapeHtml(title)}）</span>` : ''
+    return `<div class="mf-thm mf-proof${langClass}"${id ? ` id="${anchorOf(id)}"` : ''}>
+      <div class="mf-thm-body"><span class="mf-proof-q">${en ? 'Proof.' : '证'}</span>${
+        title
+          ? `<span class="mf-proof-title">${en ? ` (${escapeHtml(title)})` : `（${escapeHtml(title)}）`}</span>`
+          : ''
       }${appendQed(inner, ctx.qed)}</div>
     </div>`
   }
@@ -615,21 +632,23 @@ function renderContainer(node: any, ctx: Ctx): string {
       const m = ctx.thmMeta.get(id)
       if (m) m.previewHtml = inner
     }
-    return `<div class="mf-thm mf-thm-remark"${id ? ` id="${anchorOf(id)}"` : ''}>
-      <div class="mf-thm-body"><span class="mf-thm-inline-label">${meta.cn}</span>${inner}</div>
+    return `<div class="mf-thm mf-thm-remark${langClass}"${id ? ` id="${anchorOf(id)}"` : ''}>
+      <div class="mf-thm-body"><span class="mf-thm-inline-label">${en ? meta.en : meta.cn}</span>${inner}</div>
     </div>`
   }
 
   const n = node.data?.mfThmNo ?? 1
   const section = node.data?.mfThmSection ?? 1
-  const labelText = thmLabel(meta.cn, section, n, ctx.numbering.thm)
+  const labelText = thmLabel(en ? meta.en : meta.cn, section, n, ctx.numbering.thm)
   if (id) {
     const m = ctx.thmMeta.get(id)
     if (m) m.previewHtml = inner
   }
-  return `<div class="mf-thm mf-thm-${meta.env}"${id ? ` id="${anchorOf(id)}"` : ''}>
+  return `<div class="mf-thm mf-thm-${meta.env}${langClass}"${id ? ` id="${anchorOf(id)}"` : ''}>
     <div class="mf-thm-head"><span class="mf-thm-label">${escapeHtml(labelText)}</span>${
-      title ? `<span class="mf-thm-title">（${escapeHtml(title)}）</span>` : ''
+      title
+        ? `<span class="mf-thm-title">${en ? ` (${escapeHtml(title)})` : `（${escapeHtml(title)}）`}</span>`
+        : ''
     }</div>
     <div class="mf-thm-body">${inner}</div>
   </div>`
