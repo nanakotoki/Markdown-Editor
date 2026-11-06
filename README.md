@@ -33,7 +33,7 @@ MathFlow 把「写作」和「公式」放在同一个光标里：正文用 Mark
 ### 方式一：安装版（Windows，推荐；要发给别人就发这个）
 
 ```
-release\installer\MathFlow-Setup-1.0.6.exe      （约 109 MB）
+release\installer\MathFlow-Setup-1.0.7.exe      （约 109 MB）
 ```
 
 双击 → 一路「下一步」→ 桌面和开始菜单出现 MathFlow 图标，双击即用。
@@ -51,7 +51,7 @@ release\installer\MathFlow-Setup-1.0.6.exe      （约 109 MB）
 ### 方式二：便携版（Windows，免安装）
 
 ```
-release\portable\MathFlow-Portable-1.0.6.exe      （约 109 MB）
+release\portable\MathFlow-Portable-1.0.7.exe      （约 109 MB）
 ```
 
 单文件，双击即用，不写注册表、不进「应用」列表，适合放 U 盘或没有安装权限的电脑。
@@ -65,13 +65,13 @@ release\portable\MathFlow-Portable-1.0.6.exe      （约 109 MB）
 
 ```
 发给别人/
-├── MathFlow-Setup-1.0.6.exe     安装版
-├── MathFlow-Portable-1.0.6.exe     便携版
+├── MathFlow-Setup-1.0.7.exe     安装版
+├── MathFlow-Portable-1.0.7.exe     便携版
 ├── 使用说明.txt                  给非技术用户的一页说明（含 SmartScreen 处理办法）
 └── SHA256.txt                    校验值，对方可自行核对
 ```
 
-对方只需要做一件事：双击 `MathFlow-Setup-1.0.6.exe`，下一步、下一步、完成。
+对方只需要做一件事：双击 `MathFlow-Setup-1.0.7.exe`，下一步、下一步、完成。
 
 重新生成这套产物（会依次做前端构建 → 图标 → 打包 → 归档）：
 
@@ -380,12 +380,12 @@ export/
 
 * **矩阵构造器**：8×8 网格、7 种环境（pmatrix / bmatrix / Bmatrix / vmatrix / Vmatrix / matrix / array）、单位阵、对角阵、转置、从剪贴板粘贴表格自动填充。
 * **真值表**：输入 `(p ∧ q) → r` 这类命题逻辑式，自动生成真值表，可导出 Markdown 表格或 LaTeX `tabular`。
-* **符号面板**：7 大类常用符号，支持收藏；收藏项进入侧栏「收藏」页签。
+* **符号面板**：17 个分组、365 个符号（希腊 24 小写 + 24 大写 + 7 变体、箭头、关系、集合、大算子、装饰、定界符、字体、几何），支持跨分组搜索与收藏；收藏项进入侧栏「收藏」页签。
 * **宏管理**：`\newcommand` 形式的宏定义实时应用于编辑器与预览；内置一套学术常用宏（`\R` `\N` `\E` `\Var` 等）。
 * **函数绘图**：输入 `f(x)=x^2-3x+1` 绘制曲线，Canvas 支持缩放/平移/悬停读数，自动标注极值点。
 * **矩阵求值**：`\begin{pmatrix}...\end{pmatrix}` 直接算出行列式、逆矩阵、迹、秩、转置。
 * **手写画板**：鼠标/触控板手写公式，或 `Ctrl+V` 直接粘贴截图，识别后插入（离线时使用内置演示数据）。
-* **AI 助手**：自然语言 → LaTeX、公式重构、公式解释；未配置 API Key 时自动回退到 86 条离线经典公式库（支持中文 / 拼音 / 关键词检索）。
+* **AI 助手**：自然语言 → LaTeX、公式重构、公式解释；未配置 API Key 时自动回退到 233 条离线经典公式库，覆盖 12 个理工科门类（支持中文 / 拼音 / 关键词检索）。
 
 ### 6. 学术增强 Markdown
 

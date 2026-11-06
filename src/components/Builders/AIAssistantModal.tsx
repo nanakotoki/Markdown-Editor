@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { BookOpen, Loader2, Quote, Sparkles, Wand2 } from 'lucide-react'
 import { Button, Field, Modal, TextArea, TextInput } from '../ui'
 import { explainFormula, isAIConfigured, nlToLatex, refactorFormula } from '../../core/aiService'
-import { FORMULA_CATEGORIES, FORMULA_LIBRARY, searchFormulas, type FormulaEntry } from '../../core/formulaLibrary'
+import { FORMULA_CATEGORIES, FORMULA_LIBRARY, FORMULA_SUMMARY, searchFormulas, type FormulaEntry } from '../../core/formulaLibrary'
 import { renderMathSafely } from '../../core/katexSafeRender'
 import { editorBridge } from '../../store/editorBridge'
 import { useEditorStore } from '../../store/useEditorStore'
@@ -100,7 +100,7 @@ export default function AIAssistantModal({
       open={open}
       onOpenChange={(v) => !v && onClose()}
       title="AI 公式助手 · 离线公式库"
-      subtitle={configured ? `已连接 ${aiConfig.provider} · ${aiConfig.model}` : '未配置 API Key：将使用本地 68 条经典公式库检索'}
+      subtitle={configured ? `已连接 ${aiConfig.provider} · ${aiConfig.model}` : `未配置 API Key：将使用本地离线公式库检索（${FORMULA_SUMMARY}）`}
       icon={<Sparkles size={18} />}
       width="max-w-5xl"
       footer={

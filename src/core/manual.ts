@@ -259,12 +259,13 @@ export const MANUAL_SECTIONS: ManualSection[] = [
       {
         title: '常用符号',
         syntax: '\\alpha \\beta \\gamma \\sum_{i=1}^{n} \\int_0^1 \\lim_{x\\to 0} \\frac{a}{b} \\sqrt[3]{x} \\mathbb{R} \\mathcal{L} \\operatorname{argmax}',
+        note: '记不住命令就开「插入 → 符号面板」：按场景分成 17 组共三百多个符号（希腊 24 小写 + 24 大写 + 7 变体、箭头、关系、集合、大算子、装饰、定界符、字体、几何），点一下直接插到光标处，搜索框是跨全部分组查的。',
         block: true,
       },
       {
         title: '数学模式快捷输入',
-        syntax: j('//  → \\frac{}{}', ';a  → \\alpha      ;b → \\beta      ;p → \\pi', 'sum + 空格 → \\sum_{i=}^{}   int + 空格 → \\int_{}^{}', '=>  → \\implies      -> → \\to      != → \\neq', 'sr → ^2   inv → ^{-1}   vec/hat/bar/norm/abs + 空格', 'pmat / bmat / vmat / cases + 空格 → 对应矩阵与分段函数'),
-        note: '只在 `$…$` 或 `$$…$$` 内部生效；`Tab` 在占位符之间跳。完整列表见「工具 → 快捷输入速查」。',
+        syntax: j('//  → \\frac{}{}', ';a  → \\alpha      ;b → \\beta      ;p → \\pi', ';j → \\nu   ;y → \\tau   ;c → \\chi   ;n → \\nabla', ';E → \\varepsilon  ;J → \\vartheta  ;R → \\varrho', 'sum + 空格 → \\sum_{i=}^{}   int + 空格 → \\int_{}^{}', '=>  → \\implies      -> → \\to      != → \\neq', 'sr → ^2   inv → ^{-1}   vec/hat/bar/norm/abs + 空格', 'pmat / bmat / vmat / cases + 空格 → 对应矩阵与分段函数'),
+        note: '只在 `$…$` 或 `$$…$$` 内部生效；`Tab` 在占位符之间跳。希腊字母 24 个小写全收，其中 ν 用 `;j`、τ 用 `;y`、χ 用 `;c`（n / t 分别让给了更常用的 ∇ 和 θ）；大写字母 `;G ;D ;T ;L ;X ;P ;S ;U ;F ;Q ;W`。完整列表见「工具 → 快捷输入速查」。',
         block: true,
         tag: '提速',
       },

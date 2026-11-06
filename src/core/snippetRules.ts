@@ -85,13 +85,25 @@ export const SNIPPET_RULES: SnippetRule[] = [
   { id: 'auto-sub', trigger: 'immediate', re: /(?<![\\_^A-Za-z])([A-Za-z])(\d)$/, insert: '$1_{$2}$0' },
 ]
 
-/* ---------------- 分号前缀希腊字母 ---------------- */
+/* ---------------- 分号前缀希腊字母 ----------------
+ *  规则：`;` + 一个字母，展开成对应 LaTeX 命令。
+ *  · 小写希腊 24 个全收：首次字母被占用时顺延（这三处要记一下）
+ *      n → \nabla（物理更常用）  ν 改用 j
+ *      t → \theta                τ 改用 y
+ *      v → \varphi               φ 用 f
+ *  · 大写希腊只列 KaTeX 真有命令的 11 个（Γ Δ Θ Λ Ξ Π Σ Υ Φ Ψ Ω），
+ *    其余 13 个大写与拉丁字母同形，直接打字母就是正确写法，不值得占快捷键。
+ *  · 大写位顺便放了 7 个变体字形，写物理/统计时比翻面板快。
+ */
 export const GREEK_MAP: Record<string, string> = {
-  a: '\\alpha', b: '\\beta', g: '\\gamma', G: '\\Gamma', d: '\\delta', D: '\\Delta',
-  e: '\\epsilon', z: '\\zeta', t: '\\theta', T: '\\Theta', i: '\\iota', k: '\\kappa',
-  l: '\\lambda', L: '\\Lambda', m: '\\mu', n: '\\nabla', x: '\\xi', p: '\\pi', P: '\\Pi',
-  r: '\\rho', s: '\\sigma', S: '\\Sigma', u: '\\upsilon', f: '\\phi', F: '\\Phi',
-  w: '\\omega', W: '\\Omega', v: '\\varphi', q: '\\psi', Q: '\\Psi',
+  a: '\\alpha', b: '\\beta', g: '\\gamma', d: '\\delta', e: '\\epsilon', z: '\\zeta',
+  h: '\\eta', t: '\\theta', i: '\\iota', k: '\\kappa', l: '\\lambda', m: '\\mu',
+  j: '\\nu', x: '\\xi', p: '\\pi', r: '\\rho', s: '\\sigma', y: '\\tau',
+  u: '\\upsilon', f: '\\phi', c: '\\chi', q: '\\psi', w: '\\omega', v: '\\varphi',
+  n: '\\nabla',
+  G: '\\Gamma', D: '\\Delta', T: '\\Theta', L: '\\Lambda', X: '\\Xi', P: '\\Pi',
+  S: '\\Sigma', U: '\\Upsilon', F: '\\Phi', Q: '\\Psi', W: '\\Omega',
+  E: '\\varepsilon', J: '\\vartheta', B: '\\varpi', R: '\\varrho', O: '\\varsigma', V: '\\varkappa',
 }
 
 export interface Expansion {
@@ -207,7 +219,10 @@ export const SNIPPET_CHEATSHEET: Array<{ group: string; items: Array<[string, st
       ['xx .. ... inf', '× · ⋯ ∞'],
       ['inn nin sub sube', '∈ ∉ ⊂ ⊆'],
       ['AA EE RR ZZ NN CC', '∀ ∃ ℝ ℤ ℕ ℂ'],
-      [';a ;b ;g ;t ;l ...', '希腊字母'],
+      [';a ;b ;g ;d ;e ;h ;t ;l ;m ;p ;s ;f ;w ...', '希腊字母（; + 字母，24 个小写全收）'],
+      [';n = ∇，ν = ;j，τ = ;y', '三处顺延：n/t 被 ∇/θ 占用'],
+      [';G ;D ;T ;L ;X ;P ;S ;U ;F ;Q ;W', '大写希腊 Γ Δ Θ Λ Ξ Π Σ Υ Φ Ψ Ω'],
+      [';E ;J ;B ;R ;O ;V', '变体 ε ϑ ϖ ϱ ς ϰ'],
     ],
   },
 ]

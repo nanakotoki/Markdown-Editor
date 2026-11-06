@@ -243,7 +243,7 @@ export default function MacroDrawer({ open, onClose }: { open: boolean; onClose:
             </Field>
           </div>
           <div className="text-[11px] leading-relaxed text-ink-400">
-            未配置密钥时，自然语言转公式会退化为本地 68 条经典公式库的检索，手写识别会使用本地演示结果——所有功能仍可完整体验。
+            未配置密钥时，自然语言转公式会退化为本地离线公式库的检索，手写识别会使用本地演示结果——所有功能仍可完整体验。
           </div>
         </div>
       )}
