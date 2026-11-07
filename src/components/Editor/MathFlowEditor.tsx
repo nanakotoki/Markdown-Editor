@@ -262,7 +262,12 @@ export default function MathFlowEditor({
               const s = useEditorStore.getState()
               if (s.mode === 'local') {
                 flush()
-                void s.saveDoc(docId).then(() => s.showToast('已保存到磁盘', 'success'))
+                // 自动保存模式下不弹提示：每按一次就挡一次视线，而落盘这件事本来已经由标签圆点表达
+                if (s.settings.saveMode === 'manual') {
+                  void s.saveDoc(docId).then(() => s.showToast('已保存到磁盘', 'success'))
+                } else {
+                  void s.saveDoc(docId)
+                }
               } else {
                 s.showToast('浏览器内文档已在本地自动保存', 'info')
               }
@@ -279,6 +284,7 @@ export default function MathFlowEditor({
             onRequestBuilder('ai', r?.latex ?? '')
           },
           onExpanded: () => {},
+          isEnabled: () => useEditorStore.getState().settings.autoSnippet !== false,
         }),
         refCompletion({ getRefs, getBib, getMacros }),
         mfTheme,

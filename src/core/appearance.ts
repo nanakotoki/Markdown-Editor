@@ -10,6 +10,7 @@
  */
 
 import type { Settings } from '../store/useEditorStore'
+import { MM_TO_PX } from './pagination'
 
 export type PreviewFontKey = Settings['previewFont']
 export type EditorFontKey = Settings['editorFont']
@@ -157,6 +158,9 @@ export function applyAppearance(s: Settings) {
   root.setProperty('--mf-kai', KAI_STACK)
   // 定理/证明正文：默认楷体（中文讲义惯例），也可以跟着正文字体走
   root.setProperty('--mf-thm-body-font', s.thmBodyKai ? KAI_STACK : preview)
+  // 页边距：改成 px 写进变量，纸面 padding 与分页引擎读的是同一个值
+  root.setProperty('--mf-pad-x', `${(s.pageMarginX ?? 18) * MM_TO_PX}px`)
+  root.setProperty('--mf-pad-y', `${(s.pageMarginY ?? 20) * MM_TO_PX}px`)
   // 这两项靠属性选择器切换样式，比逐个改 class 稳
   document.documentElement.dataset.mathStyle = s.mathStyle
   document.documentElement.dataset.thmStyle = s.thmStyle

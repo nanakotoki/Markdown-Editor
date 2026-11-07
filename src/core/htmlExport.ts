@@ -36,11 +36,18 @@ export async function buildStandaloneHtml(markdown: string, opts: HtmlExportOpti
     citationStyle: settings.citationStyle,
     numbering: { thm: settings.thmNumbering, eq: settings.eqNumbering, eqTag: settings.eqTagStyle },
     qed: settings.qedSymbol,
+    headingNumbering: settings.headingNumbering,
+    figNumbering: settings.figNumbering,
   })
   const katex = await getInlinedKatexCss()
   const date = new Date().toLocaleDateString('zh-CN')
   /** 把外观设置写成内联变量：导出的 HTML 与应用里看到的排版一致 */
   const exportFont = resolveExportStack(settings)
+  /** 打印时的页边距交给 .mf-page 的内边距，所以这两个变量挂在它身上 */
+  const pageStyle = [
+    `--mf-pad-x:${(settings.pageMarginX * (96 / 25.4)).toFixed(2)}px`,
+    `--mf-pad-y:${(settings.pageMarginY * (96 / 25.4)).toFixed(2)}px`,
+  ].join(';')
   const bodyStyle = [
     `--mf-serif:${exportFont}`,
     `--mf-thm-body-font:${settings.thmBodyKai ? KAI_STACK : exportFont}`,

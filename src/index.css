@@ -295,8 +295,7 @@ body {
 .mf-academic h1.mf-heading {
   font-size: 1.85em;
   margin-top: 0.2em;
-  padding-bottom: 0.35em;
-  border-bottom: 1px solid #e6e9ef;
+  padding-bottom: 0.1em;
 }
 .mf-academic h2.mf-heading {
   font-size: 1.35em;
@@ -560,21 +559,21 @@ body {
 }
 .mf-thm-head {
   font-family: var(--mf-sans);
-  /* 与正文同字号：标题只靠字重和纯黑来立住，不靠变大 */
+  /* 与正文同字号、纯黑；黑体本身已经够重，再加 800 会显得发肥 */
   font-size: 1em;
-  font-weight: 800;
+  font-weight: 400;
   letter-spacing: 0.01em;
   margin-bottom: 0.28em;
   color: #000;
 }
 .mf-thm-label {
   font-family: var(--mf-sans);
-  font-weight: 800;
+  font-weight: 500;
   color: inherit;
 }
 .mf-thm-title {
   font-family: var(--mf-sans);
-  font-weight: 800;
+  font-weight: 400;
   color: #000;
 }
 .mf-thm-body {
@@ -634,13 +633,14 @@ body {
   background: #fbfbfc;
 }
 .mf-proof .mf-thm-body {
-  font-family: var(--mf-thm-body-font, var(--mf-kai));
+  /* 证明是论证正文，用正文字体；楷体只留给「证」这个字标记 */
+  font-family: var(--mf-serif);
 }
 .mf-proof-q {
   float: left;
   margin-right: 0.3em;
-  font-family: var(--mf-kai);
-  font-weight: 800;
+  font-family: var(--mf-sans);
+  font-weight: 500;
   color: #000;
   line-height: 1.85;
   text-indent: 0;
@@ -1013,7 +1013,7 @@ body {
 @media print {
   @page {
     size: A4;
-    margin: 20mm 18mm;
+    margin: 0;
   }
   body {
     background: #fff;
@@ -1078,10 +1078,12 @@ body {
 }
 .mf-sheet {
   position: relative;
-  width: 794px; /* 210mm */
-  min-height: 1123px; /* 297mm */
+  /* 一律用 mm：屏幕上和打印里走同一套长度单位，
+     才不会出现 794px(210.03mm) 与 210mm 差 0.3px、个别行折行位置对不上的情况 */
+  width: 210mm;
+  min-height: 297mm;
   margin: 0 auto 24px;
-  padding: 76px 68px; /* 20mm / 18mm */
+  padding: var(--mf-pad-y, 76px) var(--mf-pad-x, 68px); /* 由设置里的页边距决定 */
   background: #fff;
   box-shadow: 0 10px 30px -20px rgba(20, 26, 35, 0.5);
   overflow: hidden;
@@ -1095,6 +1097,11 @@ body {
 .mf-sheet .mf-academic {
   font-size: inherit;
   line-height: inherit;
+}
+
+/* 每页第一块不带上一段的间距，页首才对得齐页边距（打印同样生效） */
+.mf-sheet .mf-academic > :first-child {
+  margin-top: 0;
 }
 
 /* 纸面（含量尺）上的公式一律与正文同字号：KaTeX 默认 1.21em，打印出来会显得突兀 */
@@ -1125,7 +1132,8 @@ body {
   top: 0;
   visibility: hidden;
   pointer-events: none;
-  width: 658px; /* 794 - 68*2 */
+  /* 版心宽度必须和真实纸面逐像素相等，分页高度才算得准 */
+  width: calc(210mm - 2 * var(--mf-pad-x, 68px));
   font-size: var(--mf-academic-size, 16px);
   line-height: var(--mf-academic-leading, 1.8);
 }
@@ -1177,12 +1185,14 @@ body {
     background: #fff;
   }
   .mf-sheet {
-    width: auto;
+    /* 屏幕与打印用同一套纸面尺寸和边距，PDF 才会和阅读模式逐页对齐 */
+    width: 210mm;
+    height: 297mm;
     min-height: 0;
     margin: 0;
-    padding: 0;
+    padding: var(--mf-pad-y, 76px) var(--mf-pad-x, 68px);
     box-shadow: none;
-    overflow: visible;
+    overflow: hidden;
     break-after: page;
     page-break-after: always;
   }

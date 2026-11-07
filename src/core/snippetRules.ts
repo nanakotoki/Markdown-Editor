@@ -29,7 +29,8 @@ export const SNIPPET_RULES: SnippetRule[] = [
   { id: 'inv', trigger: 'immediate', re: word('inv'), insert: '^{-1}' },
   { id: 'tp', trigger: 'immediate', re: word('tp'), insert: '^{\\top}' },
   { id: 'pw', trigger: 'immediate', re: word('pw'), insert: '^{$1}$0' },
-  { id: '__', trigger: 'immediate', re: /(?<!\\)_$/, insert: '_{$1}$0' },
+  // 两个下划线才展开成 `_{ }`。单个 `_` 保持原样——手敲角标时不该被改写
+  { id: '__', trigger: 'immediate', re: /(?<!\\)__$/, insert: '_{$1}$0' },
   { id: 'sq', trigger: 'immediate', re: word('sq'), insert: '\\sqrt{$1}$0' },
   { id: 'nsq', trigger: 'immediate', re: word('nsq'), insert: '\\sqrt[$1]{$2}$0' },
 

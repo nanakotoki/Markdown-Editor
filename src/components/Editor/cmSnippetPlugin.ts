@@ -42,6 +42,12 @@ export interface SnippetOptions {
   onAskAI?: (mode: 'inline' | 'display') => void
   /** 每次成功展开时回调，用于 HUD 状态提示 */
   onExpanded?: (id: string) => void
+  /**
+   * 是否启用自动展开。设置里关掉「数学自动补全」后这里返回 false：
+   * 所有按键原样进入文档，不再有 `x1 -> x_{1}`、`;a -> \alpha` 之类的改写。
+   * 用 getter 而不是布尔值，这样切换开关不必重建编辑器。
+   */
+  isEnabled?: () => boolean
 }
 
 const EXPANDABLE = /^[a-zA-Z0-9_\-\s|/<>!=~.:;\\]$/
@@ -51,6 +57,8 @@ export function snippetExtensions(opts: SnippetOptions = {}): Extension {
     if (view.composing) return false
     if (!text || text.length !== 1) return false
     if (!EXPANDABLE.test(text)) return false
+    // 关掉自动补全时直接放行，连数学区间判断都不做
+    if (opts.isEnabled && !opts.isEnabled()) return false
 
     const docText = view.state.doc.toString()
     const range = mathRangeAt(docText, to)
@@ -78,7 +86,9 @@ export function snippetExtensions(opts: SnippetOptions = {}): Extension {
     const before = view.state.sliceDoc(Math.max(0, to - 40), to) + text
     const exp = expandSnippet(before, 'immediate')
     if (exp) {
-      applyExpansion(view, to, exp.length, exp.insert, exp.stops)
+      // `before` 末尾那个字符此时还没进文档，所以真正要替换的只有 length - 1 个字符。
+      // 少减这个 1 会连光标前一个字符一起吃掉（打 `n` 再打下划线变成 `_{}` 就是这么来的）。
+      applyExpansion(view, to, Math.max(0, exp.length - 1), exp.insert, exp.stops)
       opts.onExpanded?.(exp.id)
       return true
     }

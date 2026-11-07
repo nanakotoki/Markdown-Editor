@@ -11,7 +11,7 @@
  * ============================================================================
  */
 
-import { CONTENT_W, paginateBlocks } from './pagination'
+import { paginateElements, readMetrics } from './pagination'
 
 /** 从某个顶层块开始，往后找到第一个带源码行号的块 */
 function lineOfBlock(el: HTMLElement | null): number | null {
@@ -34,9 +34,10 @@ function lineOfBlock(el: HTMLElement | null): number | null {
 export function computePageBreakLines(html: string): number[] {
   if (typeof document === 'undefined' || !html.trim()) return []
 
+  const m = readMetrics()
   const host = document.createElement('div')
   host.className = 'mf-sheet-measure'
-  host.style.width = `${CONTENT_W}px`
+  host.style.width = `${m.contentW}px`
   const inner = document.createElement('div')
   inner.className = 'mf-academic'
   inner.innerHTML = html
@@ -46,12 +47,12 @@ export function computePageBreakLines(html: string): number[] {
   try {
     const kids = Array.from(inner.children) as HTMLElement[]
     if (kids.length < 2) return []
-    const pages = paginateBlocks(kids)
+    const pages = paginateElements(kids, m.safeH)
     const lines: number[] = []
     for (let p = 1; p < pages.length; p++) {
-      const firstIdx = pages[p][0]
-      if (firstIdx == null) continue
-      const line = lineOfBlock(kids[firstIdx] ?? null)
+      const first = pages[p][0]
+      if (!first) continue
+      const line = lineOfBlock(first.el)
       if (line != null && !lines.includes(line)) lines.push(line)
     }
     return lines.sort((a, b) => a - b)

@@ -39,6 +39,8 @@ const THM_ENV: Record<string, string> = {
   remark: 'remark',
   proof: 'proof',
   algorithm: 'algorithm',
+  exercise: 'exercise',
+  solution: 'solution',
 }
 
 export function escapeLatex(s: string): string {
@@ -59,6 +61,8 @@ interface Ctx {
   labelPrefix: string
   bibUsed: string[]
   bib: BibEntry[]
+  /** 脚注定义：identifier -> 定义节点（\footnote 需要立刻拿到内容） */
+  fnDefs: Map<string, any>
 }
 
 const REF_RE = /@(eq|thm|lem|def|prop|cor|exa|prf|alg|sec|fig|tab):([A-Za-z0-9_\-:.]+)/g
@@ -134,7 +138,13 @@ function inlineToLatex(nodes: any[], ctx: Ctx): string {  return (nodes ?? [])
         case 'link':
           return `\\href{${escapeLatex(n.url ?? '')}}{${inlineToLatex(n.children, ctx)}}`
         case 'image':
-          return `\\textit{[图: ${escapeLatex(n.alt ?? '')}]}`
+          // 独立插图由 ::: figure / 单独成段处理；这里只可能是行内图，给个可编译的占位
+          return `\\includegraphics[width=.6\\linewidth]{${escapeLatex(n.url ?? '')}}`
+        case 'footnoteReference': {
+          const def = ctx.fnDefs.get(String(n.identifier ?? n.label ?? ''))
+          const inner = def ? blocksToLatex(def.children ?? [], ctx) : ''
+          return `\\footnote{${inner}}`
+        }
         case 'break':
           return '\\\\\n'
         case 'html':
@@ -225,8 +235,30 @@ function blockToLatex(node: any, ctx: Ctx, indent = ''): string {
   }
 }
 
+/** 在子树里找第一张图片（:: figure 用） */
+function firstImage(nodes: any[]): any | null {
+  for (const n of nodes ?? []) {
+    if (n.type === 'image') return n
+    const hit = firstImage(n.children ?? [])
+    if (hit) return hit
+  }
+  return null
+}
+
+/** 去掉包含图片的段落，避免插图在 figure 里又出现一次 */
+function withoutImages(nodes: any[]): any[] {
+  return (nodes ?? []).filter((n) => {
+    if (n.type === 'image') return false
+    if (n.type === 'paragraph' && (n.children ?? []).every((c: any) => c.type === 'image' || (c.type === 'text' && !String(c.value ?? '').trim()))) {
+      return false
+    }
+    return true
+  })
+}
+
 function containerToLatex(node: any, ctx: Ctx): string {
   if (node.name === 'pagebreak' || node.name === 'newpage' || node.name === 'clearpage') return '\\newpage'
+  if (node.name === 'toc' || node.name === 'contents' || node.name === 'tableofcontents') return '\\tableofcontents'
   const env = THM_ENV[node.name]
   const id: string | undefined = node.attributes?.id
   const children = [...(node.children ?? [])]
@@ -235,11 +267,41 @@ function containerToLatex(node: any, ctx: Ctx): string {
     title = inlineToLatex(children[0].children ?? [], ctx)
     children.shift()
   }
+
+  // 插图：\\begin{figure} + \\includegraphics + \\caption
+  if (node.name === 'figure') {
+    const img = firstImage(children)
+    const body = blocksToLatex(withoutImages(children), ctx)
+    const lines = ['\\begin{figure}[htbp]', '  \\centering']
+    if (img) lines.push(`  \\includegraphics[width=.82\\linewidth]{${escapeLatex(img.url ?? '')}}`)
+    if (title) lines.push(`  \\caption{${title}}`)
+    if (id) lines.push(`  \\label{${id}}`)
+    if (body.trim()) lines.push(body)
+    lines.push('\\end{figure}')
+    return lines.join('\n')
+  }
+
+  // 表格：把题注塞进 table 环境
+  if (node.name === 'table') {
+    const tableNode = (children ?? []).find((c: any) => c.type === 'table')
+    const rest = (children ?? []).filter((c: any) => c !== tableNode)
+    const inner = tableNode ? tableToLatex(tableNode, ctx) : blocksToLatex(rest, ctx)
+    const extra = [
+      title ? `  \\caption{${title}}` : '',
+      id ? `  \\label{${id}}` : '',
+    ].filter(Boolean)
+    if (extra.length) {
+      // tableToLatex 已经生成了完整的 table 环境，这里把题注插在 \centering 之后
+      return inner.replace('  \\centering', ['  \\centering', ...extra].join('\n'))
+    }
+    return inner
+  }
+
   const body = blocksToLatex(children, ctx)
   if (!env) {
     return `\\begin{quote}\n${title ? `\\textbf{${title}}\\\\\n` : ''}${body}\n\\end{quote}`
   }
-  const opt = title && env !== 'proof' ? `[${title}]` : ''
+  const opt = title && env !== 'proof' && env !== 'solution' ? `[${title}]` : ''
   const label = id ? `\\label{${id}}\n` : ''
   return `\\begin{${env}}${opt}\n${label}${body}\n\\end{${env}}`
 }
@@ -368,6 +430,7 @@ function preamble(template: TexTemplate, opts: TexExportOptions, usedBib: string
 % ===== 生成自 MathFlow =====
 \\usepackage{amsmath,amssymb,amsthm,bm,mathtools}
 \\usepackage{booktabs}
+\\usepackage{graphicx}
 \\usepackage{algorithm}
 \\usepackage{algpseudocode}
 \\usepackage{geometry}
@@ -385,6 +448,9 @@ function preamble(template: TexTemplate, opts: TexExportOptions, usedBib: string
 \\theoremstyle{definition}
 \\newtheorem{example}[theorem]{例题}
 \\newtheorem{remark}[theorem]{注}
+\\newtheorem{exercise}[theorem]{习题}
+% 解答不编号，跟着上面的习题走
+\\newenvironment{solution}{\\par\\noindent\\textbf{解}\\quad}{\\par}
 
 \\title{${escapeLatex(opts.title ?? 'MathFlow 文档')}}
 \\author{${escapeLatex(opts.author ?? '')}}
@@ -396,6 +462,7 @@ ${macros}`
 % ===== 生成自 MathFlow =====
 \\usepackage{amsmath,amssymb,amsthm,bm,mathtools}
 \\usepackage{booktabs}
+\\usepackage{graphicx}
 \\usepackage{algorithm}
 \\usepackage{algpseudocode}
 \\usepackage{hyperref}
@@ -409,6 +476,8 @@ ${macros}`
 \\newtheorem{corollary}{Corollary}
 \\newtheorem{example}{Example}
 \\newtheorem{remark}{Remark}
+\\newtheorem{exercise}{Exercise}
+\\newenvironment{solution}{\\par\\noindent\\textbf{Solution.}\\quad}{\\par}
 
 \\title{${escapeLatex(opts.title ?? 'MathFlow Document')}}
 \\author{\\IEEEauthorblockN{${escapeLatex(opts.author ?? '')}}}
@@ -433,6 +502,8 @@ ${macros}`
 \\newtheorem{corollary}{Corollary}
 \\newtheorem{example}{Example}
 \\newtheorem{remark}{Remark}
+\\newtheorem{exercise}{Exercise}
+\\newenvironment{solution}{\\par\\noindent\\textbf{Solution.}\\quad}{\\par}
 
 \\title{${escapeLatex(opts.title ?? 'MathFlow Document')}}
 \\author{${escapeLatex(opts.author ?? '')}}
@@ -462,6 +533,15 @@ export type TexStats = TexCompileResult['stats']
 /** 一份文档的正文编译（bodyOnly 时复用） */
 function compileBody(markdown: string, opts: TexExportOptions, template: TexTemplate) {
   const zh = template === 'ctexart' || template === 'ctexbook'
+  const tree = parseMarkdown(markdown)
+  // 脚注定义要提前收齐：\footnote{} 是在行内转换时就展开的
+  const fnDefs = new Map<string, any>()
+  const collectFn = (node: any) => {
+    if (node.type === 'footnoteDefinition') fnDefs.set(String(node.identifier ?? node.label ?? ''), node)
+    for (const c of node.children ?? []) collectFn(c)
+  }
+  collectFn(tree)
+
   const ctx: Ctx = {
     template,
     zh,
@@ -471,8 +551,9 @@ function compileBody(markdown: string, opts: TexExportOptions, template: TexTemp
     labelPrefix: opts.labelPrefix ?? 'sec-',
     bibUsed: [],
     bib: opts.bib ?? [],
+    fnDefs,
   }
-  const body = blocksToLatex(parseMarkdown(markdown).children, ctx)
+  const body = blocksToLatex(tree.children, ctx)
   const stats: TexStats = {
     sections: ctx.headingCounter,
     equations: (markdown.match(/\\label\s*\{[^{}]*\}/g) || []).length,

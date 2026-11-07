@@ -42,7 +42,36 @@ function avgLineHeight(a: Anchor[]): number {
   return Math.max(6, (last.y - first.y) / dl)
 }
 
-/** 行号 -> y（没有锚点时返回 null，交给调用方决定怎么办） */
+/**
+ * 预处理：一趟排序出两份索引。
+ * 滚动事件每秒几十个，每次都对几百个锚点重新排序（旧写法 yToLine 里的 [...].sort）
+ * 是分屏滚动发涩的主因之一，排序挪到「内容变了才做一次」的地方。
+ */
+export interface AnchorIndex {
+  byLine: Anchor[]
+  byY: Anchor[]
+}
+
+export function indexAnchors(anchors: Anchor[]): AnchorIndex {
+  return {
+    byLine: [...anchors].sort((a, b) => a.line - b.line),
+    byY: [...anchors].sort((a, b) => a.y - b.y),
+  }
+}
+
+/** 二分：第一个 key >= target 的下标 */
+function lowerBound(anchors: Anchor[], key: (a: Anchor) => number, target: number): number {
+  let lo = 0
+  let hi = anchors.length
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1
+    if (key(anchors[mid]) < target) lo = mid + 1
+    else hi = mid
+  }
+  return lo
+}
+
+/** 行号 -> y（没有锚点时返回 null，交给调用方决定怎么办）。anchors 需按行号升序。 */
 export function lineToY(anchors: Anchor[], line: number): number | null {
   if (!anchors.length) return null
   const first = anchors[0]
@@ -50,36 +79,28 @@ export function lineToY(anchors: Anchor[], line: number): number | null {
   if (line <= first.line) return first.y - (first.line - line) * avgLineHeight(anchors)
   if (line >= last.line) return last.y + (line - last.line) * avgLineHeight(anchors)
 
-  // 锚点按行号升序，顺序扫描找到包住 line 的两个块
-  for (let i = 1; i < anchors.length; i++) {
-    const b = anchors[i]
-    if (b.line < line) continue
-    const a = anchors[i - 1]
-    if (b.line === a.line || b.y === a.y) return a.y
-    const t = (line - a.line) / (b.line - a.line)
-    return a.y + (b.y - a.y) * t
-  }
-  return last.y
+  const i = lowerBound(anchors, (a) => a.line, line)
+  const b = anchors[Math.min(i, anchors.length - 1)]
+  const a = anchors[Math.max(0, i - 1)]
+  if (b.line === a.line || b.y === a.y) return a.y
+  const t = (line - a.line) / (b.line - a.line)
+  return a.y + (b.y - a.y) * t
 }
 
-/** y -> 行号（非整数：块内的比例位置）。锚点先按 y 排一遍，防止 DOM 里出现绝对定位的块。 */
+/** y -> 行号（非整数：块内的比例位置）。anchors 需按 y 升序（用 indexAnchors 预处理）。 */
 export function yToLine(anchors: Anchor[], y: number): number | null {
   if (!anchors.length) return null
-  const byY = [...anchors].sort((a, b) => a.y - b.y)
-  const first = byY[0]
-  const last = byY[byY.length - 1]
+  const first = anchors[0]
+  const last = anchors[anchors.length - 1]
   if (y <= first.y) return first.line
   if (y >= last.y) return last.line
 
-  for (let i = 1; i < byY.length; i++) {
-    const b = byY[i]
-    if (b.y < y) continue
-    const a = byY[i - 1]
-    if (b.y === a.y || b.line === a.line) return a.line
-    const t = (y - a.y) / (b.y - a.y)
-    return a.line + (b.line - a.line) * t
-  }
-  return last.line
+  const i = lowerBound(anchors, (a) => a.y, y)
+  const b = anchors[Math.min(i, anchors.length - 1)]
+  const a = anchors[Math.max(0, i - 1)]
+  if (b.y === a.y || b.line === a.line) return a.line
+  const t = (y - a.y) / (b.y - a.y)
+  return a.line + (b.line - a.line) * t
 }
 
 /** 滚动时给目标块加一圈高亮，方便眼睛找到落点 */

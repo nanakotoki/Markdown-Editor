@@ -12,6 +12,8 @@
  * ============================================================================
  */
 
+import { EXTRA_CSS } from './extraCss'
+
 export const ACADEMIC_CSS = `
 :root{--mf-serif:'Latin Modern Roman','Songti SC','STSong','Noto Serif CJK SC','SimSun',Georgia,serif;
 --mf-sans:'Inter','PingFang SC','Microsoft YaHei',system-ui,sans-serif;
@@ -24,7 +26,7 @@ a{color:var(--mf-accent)}
 .mf-page{max-width:880px;margin:0 auto;background:#fff;padding:56px 64px 96px;box-shadow:0 12px 40px -20px rgba(20,26,35,.35)}
 .mf-academic{font-family:var(--mf-serif);font-size:16.5px;line-height:1.9}
 .mf-heading{font-family:var(--mf-sans);color:#141a23;font-weight:700;line-height:1.45;margin:1.5em 0 .6em}
-h1.mf-heading{font-size:1.85em;margin-top:0;padding-bottom:.35em;border-bottom:1px solid #e6e9ef}
+h1.mf-heading{font-size:1.85em;margin-top:0;padding-bottom:.1em}
 h2.mf-heading{font-size:1.35em;padding-left:10px;border-left:3px solid var(--mf-accent)}
 h3.mf-heading{font-size:1.12em}
 .mf-p{margin:.75em 0;text-align:justify}
@@ -56,7 +58,7 @@ h3.mf-heading{font-size:1.12em}
 /* ---------- 定理 / 定义 / 证明 ---------- */
 .mf-thm{margin:1.15em 0;padding:10px 16px;border-left:3px solid #c6ccd8;background:#fafbfc;border-radius:0 8px 8px 0;
 break-inside:avoid;display:flow-root;--mf-thm-tint:#eef4ff;--mf-thm-line:#c6ccd8}
-.mf-thm-head{font-family:var(--mf-sans);font-size:1em;font-weight:800;letter-spacing:.01em;margin-bottom:.28em;color:#000}
+.mf-thm-head{font-family:var(--mf-sans);font-size:1em;font-weight:400;letter-spacing:.01em;margin-bottom:.28em;color:#000}
 .mf-thm-label{font-family:var(--mf-sans);font-weight:800;color:inherit}
 .mf-thm-title{font-family:var(--mf-sans);font-weight:800;color:#000}
 .mf-thm-body{font-family:var(--mf-thm-body-font,var(--mf-kai));font-size:1em;line-height:1.85}
@@ -69,8 +71,8 @@ break-inside:avoid;display:flow-root;--mf-thm-tint:#eef4ff;--mf-thm-line:#c6ccd8
 .mf-thm-remark{--mf-thm-tint:#eceff4;--mf-thm-line:#94a3b8;border-left-color:#94a3b8;background:#fbfbfc}
 .mf-thm-inline-label{font-family:var(--mf-sans);font-weight:800;margin-right:.4em;color:#000}
 .mf-proof{border-left-color:#94a3b8;background:#fbfbfc}
-.mf-proof .mf-thm-body{font-family:var(--mf-thm-body-font,var(--mf-kai))}
-.mf-proof-q{float:left;margin-right:.3em;font-family:var(--mf-kai);font-weight:800;color:#000;line-height:1.85;text-indent:0}
+.mf-proof .mf-thm-body{font-family:var(--mf-serif)}
+.mf-proof-q{float:left;margin-right:.3em;font-family:var(--mf-sans);font-weight:500;color:#000;line-height:1.85;text-indent:0}
 .mf-proof .mf-thm-body>.mf-p:first-child{text-indent:0}
 .mf-proof-title{font-family:var(--mf-sans);font-size:.92em;color:#64748b}
 .mf-qed{display:inline-block;margin-left:.45em;color:#000;font-size:.95em;line-height:1;white-space:nowrap}
@@ -137,9 +139,10 @@ box-shadow:0 1px 2px rgba(20,26,35,.05),0 10px 24px -18px rgba(20,26,35,.45);ove
 .mf-print-bar button.primary{background:#2a55d4;border-color:#2a55d4;color:#fff}
 .mf-meta{font-family:var(--mf-sans);font-size:12px;color:#8e97a8;margin-bottom:26px;display:flex;gap:14px;flex-wrap:wrap}
 @media print{
-  @page{size:A4;margin:20mm 18mm}
+  @page{size:A4;margin:0}
   html,body{background:#fff}
-  .mf-page{box-shadow:none;padding:0;max-width:none}
+  /* @page 零边距，边距交给容器：这样屏幕上看到的分栏宽度和打印出来的一致 */
+  .mf-page{box-shadow:none;padding:var(--mf-pad-y,20mm) var(--mf-pad-x,18mm);max-width:none}
   .mf-print-bar{display:none!important}
   .mf-meta{display:none}
   .mf-academic{font-size:11pt;line-height:1.75}
@@ -151,4 +154,4 @@ box-shadow:0 1px 2px rgba(20,26,35,.05),0 10px 24px -18px rgba(20,26,35,.45);ove
   .mf-pagebreak{border:none;height:0;margin:0;break-after:page;page-break-after:always}
   .mf-pagebreak>span{display:none}
 }
-`
+${EXTRA_CSS}`

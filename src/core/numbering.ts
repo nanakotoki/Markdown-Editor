@@ -117,6 +117,8 @@ export const DIRECTIVE_CN: Record<string, string> = {
   remark: '注',
   proof: '证明',
   algorithm: '算法',
+  exercise: '习题',
+  solution: '解',
 }
 
 /** 英文文档里的标签（Theorem 1.1 / Definition 1.1 …） */
@@ -130,6 +132,8 @@ export const DIRECTIVE_EN: Record<string, string> = {
   remark: 'Remark',
   proof: 'Proof',
   algorithm: 'Algorithm',
+  exercise: 'Exercise',
+  solution: 'Solution',
 }
 
 /**
@@ -156,6 +160,8 @@ export const DIRECTIVE_KIND: Record<string, string> = {
   remark: 'prf',
   proof: 'prf',
   algorithm: 'alg',
+  exercise: 'exe',
+  solution: 'sol',
 }
 
 export interface RefIndex {

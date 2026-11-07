@@ -52,9 +52,33 @@ export default function AppearanceModal({ open, onClose }: { open: boolean; onCl
             />
             <p className="mt-1.5 text-[11px] leading-relaxed text-ink-400">
               {settings.saveMode === 'auto'
-                ? '停笔约 0.8 秒后自动写盘，标签上的圆点变蓝表示正在保存。'
+                ? '停笔约 2 秒后自动写盘，标签上的圆点变蓝表示正在保存。自动保存不会弹提示，只有手动模式按 Ctrl+S 才提示。'
                 : '只在你按 Ctrl+S（或点工具栏的保存）时写盘；有未保存改动的标签会亮橙色圆点，关闭标签前会提醒。'}
               {mode !== 'local' && '　浏览器内文档始终存在本地，此项只在打开工作区目录后生效。'}
+            </p>
+          </Row>
+        </div>
+
+        {/* ---------------- 数学输入 ---------------- */}
+        <div className="rounded-xl border border-ink-200 p-3">
+          <SectionTitle>数学输入</SectionTitle>
+          <Row label="自动补全">
+            <label className="flex cursor-pointer items-start gap-2 text-[12px] text-ink-700">
+              <input
+                type="checkbox"
+                checked={settings.autoSnippet}
+                onChange={(e) => updateSettings({ autoSnippet: e.target.checked })}
+                className="mt-0.5 h-3.5 w-3.5 accent-accent-600"
+              />
+              <span>
+                公式里自动展开快捷输入（<code className="rounded bg-ink-100 px-1">//</code> 分式、
+                <code className="rounded bg-ink-100 px-1">;a</code> 希腊字母、
+                <code className="rounded bg-ink-100 px-1">x1</code> 下标……）
+              </span>
+            </label>
+            <p className="mt-1.5 text-[11px] leading-relaxed text-ink-400">
+              关掉之后完全手敲：不会再有任何字符被替换，<code className="rounded bg-ink-100 px-1">_</code>、
+              <code className="rounded bg-ink-100 px-1">^</code> 原样留在文档里。工具栏的符号面板与公式库不受影响。
             </p>
           </Row>
         </div>
@@ -334,6 +358,97 @@ export default function AppearanceModal({ open, onClose }: { open: boolean; onCl
               </Row>
             </div>
           </div>
+        </div>
+
+        {/* ---------------- 论文版面 ---------------- */}
+        <div className="rounded-xl border border-ink-200 p-3">
+          <SectionTitle>论文版面（页边距 / 页眉页脚 / 编号）</SectionTitle>
+          <div className="grid grid-cols-2 gap-x-6">
+            <Row label="上下边距">
+              <Slider
+                value={settings.pageMarginY}
+                min={10}
+                max={40}
+                step={1}
+                suffix="mm"
+                onChange={(v) => updateSettings({ pageMarginY: v })}
+              />
+            </Row>
+            <Row label="左右边距">
+              <Slider
+                value={settings.pageMarginX}
+                min={10}
+                max={40}
+                step={1}
+                suffix="mm"
+                onChange={(v) => updateSettings({ pageMarginX: v })}
+              />
+            </Row>
+          </div>
+
+          {/* 页码单独占一行：四个选项并排放得下，不会掉到下一行去 */}
+          <Row label="页码">
+            <Pills
+              value={settings.pageNumber}
+              options={[
+                { v: 'none' as const, label: '不要' },
+                { v: 'plain' as const, label: '1' },
+                { v: 'dash' as const, label: '— 1 —' },
+                { v: 'slash' as const, label: '1 / N' },
+              ]}
+              onChange={(v) => updateSettings({ pageNumber: v })}
+            />
+          </Row>
+
+          <div className="grid grid-cols-2 gap-x-6">
+            <Row label="页眉">
+              <input
+                value={settings.pageHeader}
+                onChange={(e) => updateSettings({ pageHeader: e.target.value })}
+                placeholder="留空则不显示"
+                className="h-7 w-full rounded-lg border border-ink-200 px-2 text-[12px] outline-none focus:border-accent-400"
+              />
+            </Row>
+            <Row label="页脚">
+              <input
+                value={settings.pageFooter}
+                onChange={(e) => updateSettings({ pageFooter: e.target.value })}
+                placeholder="留空则不显示"
+                className="h-7 w-full rounded-lg border border-ink-200 px-2 text-[12px] outline-none focus:border-accent-400"
+              />
+            </Row>
+          </div>
+
+          <div className="grid grid-cols-2 gap-x-6">
+            <Row label="标题编号">
+              <label className="flex cursor-pointer items-center gap-1.5 text-[11.5px] text-ink-700">
+                <input
+                  type="checkbox"
+                  checked={settings.headingNumbering}
+                  onChange={(e) => updateSettings({ headingNumbering: e.target.checked })}
+                  className="h-3.5 w-3.5 accent-accent-600"
+                />
+                给 # / ## / ### 自动编号（1 / 1.1 / 1.1.1）
+              </label>
+            </Row>
+            <Row label="图表编号">
+              <Pills
+                value={settings.figNumbering}
+                options={[
+                  { v: 'section' as const, label: '按节：图 1.1' },
+                  { v: 'global' as const, label: '连续：图 1' },
+                ]}
+                onChange={(v) => updateSettings({ figNumbering: v })}
+              />
+            </Row>
+          </div>
+
+          <p className="text-[11px] leading-relaxed text-ink-400">
+            页眉页脚里可以写 <code className="rounded bg-ink-100 px-1">{'{page}'}</code>、
+            <code className="rounded bg-ink-100 px-1">{'{total}'}</code>、
+            <code className="rounded bg-ink-100 px-1">{'{title}'}</code> 三个占位符。
+            阅读模式的纸面、导出的网页与打印出的 PDF 用的是同一组数值，改完三处一起变。
+          </p>
         </div>
 
         <div className="flex items-center justify-between border-t border-ink-100 pt-3">

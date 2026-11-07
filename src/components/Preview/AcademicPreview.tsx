@@ -30,6 +30,8 @@ export interface AcademicPreviewProps {
   scrollElementRef?: React.MutableRefObject<HTMLDivElement | null>
   /** read = 阅读模式：照 A4 纸面分页，看到的就是导出 PDF 的样子 */
   mode?: 'preview' | 'read'
+  /** 文档标题，页眉里的 {title} 用它 */
+  docTitle?: string
 }
 
 interface HoverCard {
@@ -54,6 +56,7 @@ export default function AcademicPreview({
   jumpable = false,
   scrollElementRef,
   mode = 'preview',
+  docTitle = '',
 }: AcademicPreviewProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const [hover, setHover] = useState<HoverCard | null>(null)
@@ -81,6 +84,8 @@ export default function AcademicPreview({
         extRefs,
         numbering: { thm: settings.thmNumbering, eq: settings.eqNumbering, eqTag: settings.eqTagStyle },
         qed: settings.qedSymbol,
+        headingNumbering: settings.headingNumbering,
+        figNumbering: settings.figNumbering,
       }),
     [
       content,
@@ -92,6 +97,8 @@ export default function AcademicPreview({
       settings.eqNumbering,
       settings.eqTagStyle,
       settings.qedSymbol,
+      settings.headingNumbering,
+      settings.figNumbering,
       extRefs,
     ]
   )
@@ -106,6 +113,13 @@ export default function AcademicPreview({
     settings.thmBodyKai,
     settings.mathStyle,
     settings.qedSymbol,
+    settings.pageMarginX,
+    settings.pageMarginY,
+    settings.headingNumbering,
+    settings.figNumbering,
+    settings.pageNumber,
+    settings.pageHeader,
+    settings.pageFooter,
   ].join('|')
 
   const previews = useMemo(() => buildPreviewMap(result), [result])
@@ -285,7 +299,13 @@ export default function AcademicPreview({
             </div>
           )}
           <div className="pb-10 pt-4">
-            <PaginatedSheets html={result.html} signature={layoutKey} onPages={setPageTotal} />
+            <PaginatedSheets
+              html={result.html}
+              signature={layoutKey}
+              onPages={setPageTotal}
+              settings={settings}
+              docTitle={docTitle}
+            />
           </div>
         </>
       ) : (

@@ -136,6 +136,20 @@ export interface Settings {
   thmBodyKai: boolean
   /* ---- 阅读模式：显示分页参考线与页码 ---- */
   pageGuides: boolean
+  /* ---- 数学输入：自动补全（// 分式、;a 希腊、x1 下标……），关掉就是纯手敲 ---- */
+  autoSnippet: boolean
+  /* ---- 版面：页边距，单位 mm ---- */
+  pageMarginX: number
+  pageMarginY: number
+  /* ---- 页眉 / 页脚文字，支持 {page} {total} {title} ---- */
+  pageHeader: string
+  pageFooter: string
+  /* ---- 页码：不显示 / 1 / – 1 – / 1 / 总页数 ---- */
+  pageNumber: 'none' | 'plain' | 'dash' | 'slash'
+  /* ---- 标题自动编号：1 / 1.1 / 1.1.1 ---- */
+  headingNumbering: boolean
+  /* ---- 图表编号：按节（图 1.1）或全文连续（图 1）---- */
+  figNumbering: 'section' | 'global'
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -162,6 +176,14 @@ export const DEFAULT_SETTINGS: Settings = {
   mathStyle: 'soft',
   thmBodyKai: true,
   pageGuides: true,
+  autoSnippet: true,
+  pageMarginX: 18,
+  pageMarginY: 20,
+  pageHeader: '',
+  pageFooter: '',
+  pageNumber: 'plain',
+  headingNumbering: false,
+  figNumbering: 'section',
 }
 
 const SETTINGS_KEY = 'mf-settings-v1'
@@ -191,6 +213,15 @@ export function loadSettings(): Settings {
     if (typeof out.qedSymbol !== 'string') out.qedSymbol = '∎'
     if (typeof out.pageGuides !== 'boolean') out.pageGuides = true
     if (typeof out.thmBodyKai !== 'boolean') out.thmBodyKai = true
+    // 数学输入 / 版面
+    if (typeof out.autoSnippet !== 'boolean') out.autoSnippet = true
+    out.pageMarginX = clampNum(out.pageMarginX, 8, 45, 18)
+    out.pageMarginY = clampNum(out.pageMarginY, 8, 45, 20)
+    if (typeof out.pageHeader !== 'string') out.pageHeader = ''
+    if (typeof out.pageFooter !== 'string') out.pageFooter = ''
+    if (!['none', 'plain', 'dash', 'slash'].includes(out.pageNumber)) out.pageNumber = 'plain'
+    if (typeof out.headingNumbering !== 'boolean') out.headingNumbering = false
+    if (out.figNumbering !== 'section' && out.figNumbering !== 'global') out.figNumbering = 'section'
     return out
   } catch {
     return { ...DEFAULT_SETTINGS }
@@ -304,7 +335,8 @@ const seedBib: BibEntry[] = [
 /* 自动保存调度                                                        */
 /* ------------------------------------------------------------------ */
 
-const SAVE_DELAY = 800
+/** 停笔多久后落盘。0.8 秒对长文写作太频繁（每写一段就写一次盘），2.2 秒只在你真的停下来时才写。 */
+const SAVE_DELAY = 2200
 const saveTimers = new Map<string, ReturnType<typeof setTimeout>>()
 
 function scheduleSave(id: string, delay = SAVE_DELAY) {
@@ -909,6 +941,13 @@ export const useEditorStore = create<EditorState>()(
             thmBodyKai: DEFAULT_SETTINGS.thmBodyKai,
             thmStyle: DEFAULT_SETTINGS.thmStyle,
             qedSymbol: DEFAULT_SETTINGS.qedSymbol,
+            pageMarginX: DEFAULT_SETTINGS.pageMarginX,
+            pageMarginY: DEFAULT_SETTINGS.pageMarginY,
+            pageHeader: DEFAULT_SETTINGS.pageHeader,
+            pageFooter: DEFAULT_SETTINGS.pageFooter,
+            pageNumber: DEFAULT_SETTINGS.pageNumber,
+            headingNumbering: DEFAULT_SETTINGS.headingNumbering,
+            figNumbering: DEFAULT_SETTINGS.figNumbering,
           }
           try {
             localStorage.setItem(SETTINGS_KEY, JSON.stringify(next))

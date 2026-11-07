@@ -33,7 +33,7 @@ MathFlow 把「写作」和「公式」放在同一个光标里：正文用 Mark
 ### 方式一：安装版（Windows，推荐；要发给别人就发这个）
 
 ```
-release\installer\MathFlow-Setup-1.0.7.exe      （约 109 MB）
+release\installer\MathFlow-Setup-1.0.8.exe      （约 109 MB）
 ```
 
 双击 → 一路「下一步」→ 桌面和开始菜单出现 MathFlow 图标，双击即用。
@@ -51,7 +51,7 @@ release\installer\MathFlow-Setup-1.0.7.exe      （约 109 MB）
 ### 方式二：便携版（Windows，免安装）
 
 ```
-release\portable\MathFlow-Portable-1.0.7.exe      （约 109 MB）
+release\portable\MathFlow-Portable-1.0.8.exe      （约 109 MB）
 ```
 
 单文件，双击即用，不写注册表、不进「应用」列表，适合放 U 盘或没有安装权限的电脑。
@@ -65,13 +65,13 @@ release\portable\MathFlow-Portable-1.0.7.exe      （约 109 MB）
 
 ```
 发给别人/
-├── MathFlow-Setup-1.0.7.exe     安装版
-├── MathFlow-Portable-1.0.7.exe     便携版
+├── MathFlow-Setup-1.0.8.exe     安装版
+├── MathFlow-Portable-1.0.8.exe     便携版
 ├── 使用说明.txt                  给非技术用户的一页说明（含 SmartScreen 处理办法）
 └── SHA256.txt                    校验值，对方可自行核对
 ```
 
-对方只需要做一件事：双击 `MathFlow-Setup-1.0.7.exe`，下一步、下一步、完成。
+对方只需要做一件事：双击 `MathFlow-Setup-1.0.8.exe`，下一步、下一步、完成。
 
 重新生成这套产物（会依次做前端构建 → 图标 → 打包 → 归档）：
 
@@ -368,6 +368,7 @@ export/
 | `//` | `\frac{□}{□}` |
 | `(a+b)/` + 空格 | `\frac{a+b}{□}` |
 | `sr` `cb` `inv` `tp` | `^2` `^3` `^{-1}` `^{\top}` |
+| `__` | `_{□}`（单个 `_` 保持原样，手敲角标不会被改写） |
 | `sq` `nsq` | `\sqrt{□}` `\sqrt[n]{□}` |
 | `sum` `int` `lim` `ddx` `part` | `\sum_{i=□}^{□}`、`\int_{□}^{□}`、`\lim_{□\to□}` 等 |
 | `pmat` `bmat` `vmat` `cases` | 矩阵 / 分段函数骨架 |
@@ -375,6 +376,8 @@ export/
 | `;a` `;b` `;g` `;t` … | 希腊字母 α β γ τ |
 
 展开后 `Tab` / `Shift-Tab` 在占位符之间跳转，像写代码片段一样写公式。
+
+想完全手敲时，在「工具 → 排版与外观 → 数学输入」里关掉**数学自动补全**：所有按键原样进文档，一个字符都不改写。
 
 ### 5. 可视化构造器
 
@@ -401,10 +404,10 @@ export/
 由 @thm:lagrange 可直接推出 @eq:derivative。
 ````
 
-* 容器类型：`theorem` `definition` `lemma` `proposition` `corollary` `example` `proof` `remark`（自动编号、证明结束符 ∎）。
-* 交叉引用：`@kind:id`，支持 `thm` `eq` `fig` `tab` `alg` `sec` `def` `lem` `cor` `prop` `ex`；输入 `@` 触发补全，悬停显示内容卡片，点击跳转并高亮闪烁。
+* 容器类型：`theorem` `definition` `lemma` `proposition` `corollary` `example` `exercise` `solution` `proof` `remark`（自动编号、证明结束符 ∎；`proof` 与 `solution` 可以在段落之间跨页断开，不会整块被推到下一页）。
+* 交叉引用：`@kind:id`，支持 `thm` `eq` `fig` `tab` `alg` `sec` `def` `lem` `cor` `prop` `ex` `exe`；输入 `@` 触发补全，悬停显示内容卡片，点击跳转并高亮闪烁。正文里直接写「定理 2.1」「图 3.1」「表 3.1」也能自动变成链接。
 * 公式编号：块级公式自动编号，`\label{eq:xxx}` 建立锚点，编号与 `@eq:xxx` 引用联动。
-* 文献：`[@key]` 引用 + BibTeX 条目（`@article{...}`），文末自动生成参考文献列表，缺失条目标红提示。
+* 文献：`[@key]` 引用 + BibTeX 条目（`@article{...}`），文末自动生成参考文献列表，按 **GB/T 7714** 输出 `[1] 作者. 题名[M]. 出版地: 出版者, 年.`，缺失条目标红提示。
 * 表格：GFM 表格自动渲染为**三线表**（booktabs 风格）。
 * 算法块：围栏代码块 ` ```algorithm ` 渲染为带行号、缩进引导线、关键字加粗的伪代码三线表。
 
@@ -420,7 +423,25 @@ return $A$
 ```
 ````
 
-### 7. 导出
+### 7. 论文排版（写毕业论文够用）
+
+阅读模式里的每一张 A4 纸就是打印出来的一页——屏幕分页、页边距、页眉页脚与 PDF 逐页对齐，
+看到的换行就是打印出来的换行。
+
+| 需求 | 写法 / 设置 |
+| --- | --- |
+| 目录 | 一行 `\tableofcontents`（或 `::: toc`），标题与页码由排版引擎自动生成，页码随分页实时回填 |
+| 多级标题 | `\chapter{}` `\section{}` `\subsection{}` `\subsubsection{}`，等价于 `#` `##` `###` `####`，不带默认下划线；设置里可开**标题自动编号**（1 / 1.1 / 1.1.1） |
+| 脚注 | 正文写 `[^note]`，文末写 `[^note]: 内容`，自动编号并在页脚/文末汇总 |
+| 图与表 | `![图题](fig.png){#fig:loss}` 与 `::: table [表题]{#tab:hp}`，按 `图 3.1` / `表 3.1` 章节编号（可切全局编号），题注居中、表题在上图题在下 |
+| 引用 | `@fig:loss` `@tab:hp` `@thm:conv`，或直接写「图 3.1」；参考文献按 GB/T 7714 |
+| 页边距 | 上下 / 左右各 10–40mm 可调，改动立刻反映到分页 |
+| 页眉页脚 | 自定义文本，支持 `{page}` `{total}` `{title}` 占位符 |
+| 页码 | 无 / `1` / `— 1 —` / `1 / 12` 四种样式 |
+| 跨页 | 证明与解答允许在段落间断开，超长内容不再整块推到下一页、把上一页留成空白 |
+| 打印 | 阅读模式右上角「打印 / 存为 PDF」，纸面尺寸与阅读模式完全一致（`@page` 零边距 + 纸面自身内边距），不会整体偏下 |
+
+### 8. 导出
 
 | 格式 | 说明 |
 | --- | --- |

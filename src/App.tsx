@@ -21,7 +21,7 @@ import { macrosToKatex } from './core/katexSafeRender'
 import { renderMarkdown, type RenderResult } from './core/renderMarkdown'
 import { SNIPPET_CHEATSHEET } from './core/snippetRules'
 import { applyAppearance } from './core/appearance'
-import { collectAnchors, flashLine, lineToY, yToLine, type Anchor } from './core/scrollSync'
+import { collectAnchors, flashLine, indexAnchors, lineToY, yToLine, type Anchor, type AnchorIndex } from './core/scrollSync'
 import { editorBridge } from './store/editorBridge'
 
 export default function App() {
@@ -154,7 +154,10 @@ export default function App() {
    *  - 两边锚点各自成序列，中间的行线性插值
    * ================================================================== */
   const previewScrollRef = useRef<HTMLDivElement | null>(null)
-  const anchorsRef = useRef<{ preview: Anchor[]; editor: Anchor[] }>({ preview: [], editor: [] })
+  const anchorsRef = useRef<{ preview: AnchorIndex; editor: AnchorIndex }>({
+    preview: { byLine: [], byY: [] },
+    editor: { byLine: [], byY: [] },
+  })
   /** 谁刚刚被程序滚动过、多久之内忽略它自己的滚动事件（防止两边互相推） */
   const syncLock = useRef<{ side: '' | 'editor' | 'preview'; until: number }>({ side: '', until: 0 })
 
@@ -169,9 +172,9 @@ export default function App() {
         const y = api.topOfLine(a.line)
         if (y != null && Number.isFinite(y)) editor.push({ line: a.line, y })
       }
-      editor.sort((x, y) => x.y - y.y)
     }
-    anchorsRef.current = { preview, editor }
+    // 排序只在这里做一次；滚动事件里直接二分查表
+    anchorsRef.current = { preview: indexAnchors(preview), editor: indexAnchors(editor) }
   }, [])
 
   /** 预览重排（内容或字号变化）之后重算锚点——等 DOM 落定再量 */
@@ -209,33 +212,54 @@ export default function App() {
     const blocked = (side: 'editor' | 'preview') =>
       syncLock.current.side === side && performance.now() < syncLock.current.until
     const lock = (side: '' | 'editor' | 'preview') => {
-      syncLock.current = { side, until: performance.now() + 140 }
+      syncLock.current = { side, until: performance.now() + 90 }
     }
 
-    const onEditorScroll = () => {
+    /**
+     * 滚动事件按帧合并：一帧里可能来十几个 wheel/scroll，每个都去调
+     * posAtCoords（要读布局）和写 scrollTop（要重排），画面就掉帧。
+     * 这里只保留本帧最后一次的意图，rAF 里执行一次。
+     */
+    let rafEditor = 0
+    let rafPreview = 0
+
+    const applyEditorScroll = () => {
+      rafEditor = 0
       if (!useEditorStore.getState().settings.syncScroll) return
       if (blocked('editor')) return
       const line = api.lineAtViewportTop()
       if (line == null) return
-      const y = lineToY(anchorsRef.current.preview, line)
+      const y = lineToY(anchorsRef.current.preview.byLine, line)
       if (y == null) return
       lock('preview')
       p.scrollTop = y
     }
-    const onPreviewScroll = () => {
+    const applyPreviewScroll = () => {
+      rafPreview = 0
       if (!useEditorStore.getState().settings.syncScroll) return
       if (blocked('preview')) return
-      const line = yToLine(anchorsRef.current.preview, p.scrollTop)
+      const line = yToLine(anchorsRef.current.preview.byY, p.scrollTop)
       if (line == null) return
-      const y = lineToY(anchorsRef.current.editor, line)
+      const y = lineToY(anchorsRef.current.editor.byLine, line)
       if (y == null) return
       lock('editor')
       api.scrollToY(y)
     }
 
+    const onEditorScroll = () => {
+      if (rafEditor) return
+      rafEditor = requestAnimationFrame(applyEditorScroll)
+    }
+    const onPreviewScroll = () => {
+      if (rafPreview) return
+      rafPreview = requestAnimationFrame(applyPreviewScroll)
+    }
+
     el.addEventListener('scroll', onEditorScroll, { passive: true })
     p.addEventListener('scroll', onPreviewScroll, { passive: true })
     return () => {
+      if (rafEditor) cancelAnimationFrame(rafEditor)
+      if (rafPreview) cancelAnimationFrame(rafPreview)
       el.removeEventListener('scroll', onEditorScroll)
       p.removeEventListener('scroll', onPreviewScroll)
     }
@@ -252,7 +276,7 @@ export default function App() {
     const onMouseUp = () => {
       const line = api.lineAtCaret()
       if (line == null) return
-      const y = lineToY(anchorsRef.current.preview, line)
+      const y = lineToY(anchorsRef.current.preview.byLine, line)
       if (y == null) return
       syncLock.current = { side: 'preview', until: performance.now() + 220 }
       p.scrollTo({ top: Math.max(0, y - 10), behavior: 'smooth' })
@@ -339,6 +363,7 @@ export default function App() {
       onJumpToSource={jumpToSource}
       jumpable={viewMode === 'split'}
       scrollElementRef={previewScrollRef}
+      docTitle={doc.title}
     />
   )
 
@@ -353,6 +378,7 @@ export default function App() {
       jumpable={false}
       mode="read"
       className="w-full flex-1"
+      docTitle={doc.title}
     />
   )
 

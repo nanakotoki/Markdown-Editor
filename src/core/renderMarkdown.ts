@@ -30,7 +30,9 @@ import type { BibEntry } from '../store/useEditorStore'
  * ============================================================================
  */
 
-export type RefKind = 'eq' | 'thm' | 'lem' | 'def' | 'prop' | 'cor' | 'exa' | 'prf' | 'alg' | 'sec' | 'cite' | 'fig' | 'tab'
+export type RefKind =
+  | 'eq' | 'thm' | 'lem' | 'def' | 'prop' | 'cor' | 'exa' | 'prf' | 'alg' | 'sec' | 'cite' | 'fig' | 'tab'
+  | 'exe' | 'sol'
 
 export interface RefEntry {
   kind: RefKind
@@ -53,6 +55,8 @@ export interface TocItem {
   level: number
   text: string
   index: number
+  /** 自动编号（1 / 1.1 / 1.1.1），未开启标题编号时为空 */
+  no?: string
 }
 
 export interface RenderResult {
@@ -83,6 +87,10 @@ export interface RenderOptions {
   numbering?: Partial<NumberingConfig>
   /** 证毕符号（空串表示不加） */
   qed?: string
+  /** 标题自动编号（1 / 1.1 / 1.1.1） */
+  headingNumbering?: boolean
+  /** 图表编号：按节（图 1.1）或全文连续（图 1） */
+  figNumbering?: 'section' | 'global'
 }
 
 const THM_TYPES: Record<string, { cn: string; en: string; kind: RefKind; env: string }> = {
@@ -95,6 +103,9 @@ const THM_TYPES: Record<string, { cn: string; en: string; kind: RefKind; env: st
   remark: { cn: '注', en: 'Remark', kind: 'prf', env: 'remark' },
   proof: { cn: '证明', en: 'Proof', kind: 'prf', env: 'proof' },
   algorithm: { cn: '算法', en: 'Algorithm', kind: 'alg', env: 'algorithm' },
+  // 习题 / 解答：写作业与习题册用；习题带编号，解答不编号（跟着上面的习题走）
+  exercise: { cn: '习题', en: 'Exercise', kind: 'exe', env: 'exercise' },
+  solution: { cn: '解', en: 'Solution', kind: 'sol', env: 'solution' },
 }
 
 /**
@@ -105,6 +116,7 @@ const THM_TYPES: Record<string, { cn: string; en: string; kind: RefKind; env: st
 const REF_PREFIX_CN: Record<string, string> = {
   eq: '式', thm: '定理', lem: '引理', def: '定义', prop: '命题',
   cor: '推论', exa: '例题', alg: '算法', sec: '第', fig: '图', tab: '表',
+  exe: '习题', sol: '解',
 }
 
 /** 归一化 ::: 容器语法（允许 `::: theorem [标题] {#id}` 的松散写法） */
@@ -118,10 +130,26 @@ export function normalizeDirectives(md: string): string {
 
 export function parseMarkdown(md: string): any {
   const processor = unified().use(remarkParse).use(remarkMath).use(remarkGfm).use(remarkDirective)
-  const tree = processor.parse(normalizeDirectives(md))
+  const tree = processor.parse(normalizeDirectives(latexCommandsToMarkdown(md)))
   promoteSingleMathParagraphs(tree)
   mergeTextDirectives(tree)
   return tree
+}
+
+/**
+ * 论文写作习惯的 LaTeX 章节命令 -> Markdown 标题。
+ * `\section{引言}` 与 `## 引言` 等价，`\tableofcontents` 换成目录容器。
+ * 只认「整行只有一条命令」的写法，正文里偶尔出现的 \section 不会被误伤。
+ */
+export function latexCommandsToMarkdown(md: string): string {
+  return md
+    .replace(/^([ \t]*)\\chapter\*?[ \t]*\{([^{}\n]*)\}[ \t]*$/gm, '$1# $2')
+    .replace(/^([ \t]*)\\section\*?[ \t]*\{([^{}\n]*)\}[ \t]*$/gm, '$1# $2')
+    .replace(/^([ \t]*)\\subsection\*?[ \t]*\{([^{}\n]*)\}[ \t]*$/gm, '$1## $2')
+    .replace(/^([ \t]*)\\subsubsection\*?[ \t]*\{([^{}\n]*)\}[ \t]*$/gm, '$1### $2')
+    .replace(/^([ \t]*)\\paragraph\*?[ \t]*\{([^{}\n]*)\}[ \t]*$/gm, '$1#### $2')
+    // 生成一对完整的 ::: 容器：只写开标记会把后面整篇都吞进目录里
+    .replace(/^[ \t]*\\tableofcontents[ \t]*$/gm, '\n::: toc\n:::\n')
 }
 
 /**
@@ -213,6 +241,24 @@ interface Ctx extends Required<Pick<RenderOptions, 'macros'>> {
   mentionIndex: Map<string, RefEntry>
   /** 整篇语言：决定引用前缀用「式/定理」还是 Eq./Theorem */
   lang: 'zh' | 'en'
+  /* ---- 论文版面相关 ---- */
+  headingNumbering: boolean
+  /** 各级标题计数器：[H1, H2, ...] */
+  headingNums: number[]
+  figNumbering: 'section' | 'global'
+  figCounter: number
+  tabCounter: number
+  /* ---- 脚注 ---- */
+  /** 脚注定义：identifier -> 定义节点 */
+  fnDefs: Map<string, any>
+  /** 已编号的脚注：identifier -> 序号（按首次引用顺序） */
+  fnNumbers: Map<string, number>
+  fnOrder: string[]
+}
+
+/** 标题编号：「1」「1.1」「1.1.1」 */
+function headingNo(nums: number[], depth: number): string {
+  return nums.slice(0, Math.max(1, depth)).filter((n) => n > 0).join('.')
 }
 
 export function renderMarkdown(md: string, opts: RenderOptions = {}): RenderResult {
@@ -247,6 +293,14 @@ export function renderMarkdown(md: string, opts: RenderOptions = {}): RenderResu
     mentionIndex: new Map(),
     // 整篇的语言决定公式/定理引用显示成「式 1」「定理 1.1」还是 “Eq. (1)”“Theorem 1.1”
     lang: isEnglishText(md) ? 'en' : 'zh',
+    headingNumbering: opts.headingNumbering ?? false,
+    headingNums: [],
+    figNumbering: opts.figNumbering ?? 'section',
+    figCounter: 0,
+    tabCounter: 0,
+    fnDefs: new Map(),
+    fnNumbers: new Map(),
+    fnOrder: [],
   }
 
   // 第一遍：为公式/定理/算法/标题分配编号与 id（保证交叉引用可以前向引用）
@@ -258,7 +312,8 @@ export function renderMarkdown(md: string, opts: RenderOptions = {}): RenderResu
     .map((n) => withLineAttr(renderBlock(n, ctx), n.position?.start?.line))
     .join('\n')
   const bibHtml = renderBibliography(ctx)
-  return { html: body + bibHtml, toc: ctx.toc, refs: ctx.refs, bibUsed: ctx.citations }
+  const fnHtml = renderFootnotes(ctx)
+  return { html: body + fnHtml + bibHtml, toc: ctx.toc, refs: ctx.refs, bibUsed: ctx.citations }
 }
 
 /**
@@ -314,7 +369,14 @@ function countH1(tree: any): number {
 }
 
 function collect(tree: any, ctx: Ctx) {
-  const walk = (node: any) => {
+  /** 图号 / 表号：按节（1.1）或全文连续（1） */
+  const numbered = (n: number) => (ctx.figNumbering === 'section' ? `${Math.max(1, ctx.sectionNo)}.${n}` : String(n))
+
+  const walk = (node: any, inFigure = false) => {
+    if (node.type === 'footnoteDefinition') {
+      ctx.fnDefs.set(String(node.identifier ?? ''), node)
+      return
+    }
     if (node.type === 'heading') {
       // 每遇到一个 H1/H2 就进入新的「节」：定理、公式的编号重新起算
       if (node.depth === ctx.sectionDepth) {
@@ -326,10 +388,80 @@ function collect(tree: any, ctx: Ctx) {
       ctx.headingCounter++
       const id = `sec-${ctx.headingCounter}`
       node.data = { ...(node.data ?? {}), mfId: id }
+      // 标题自动编号：1 / 1.1 / 1.1.1，遇到深一级就清掉更深的计数
+      let no: string | undefined
+      if (ctx.headingNumbering) {
+        const d = Math.min(6, Math.max(1, node.depth))
+        while (ctx.headingNums.length < d) ctx.headingNums.push(0)
+        ctx.headingNums[d - 1] = (ctx.headingNums[d - 1] ?? 0) + 1
+        ctx.headingNums.length = d
+        no = headingNo(ctx.headingNums, d)
+        node.data.mfHeadingNo = no
+      }
       ctx.headings.push({ id, level: node.depth, text })
-      ctx.toc.push({ id, level: node.depth, text, index: ctx.headingCounter })
+      ctx.toc.push({ id, level: node.depth, text, index: ctx.headingCounter, no })
       ctx.refs.push({ kind: 'sec', id, anchor: id, label: text, detail: `第 ${ctx.headingCounter} 个标题 · H${node.depth}` })
       return
+    }
+
+    if (node.type === 'containerDirective' && (node.name === 'figure' || node.name === 'table')) {
+      const id: string | undefined = node.attributes?.id
+      const { title } = directiveTitle(node)
+      const isFig = node.name === 'figure'
+      if (isFig) ctx.figCounter++
+      else ctx.tabCounter++
+      const n = isFig ? ctx.figCounter : ctx.tabCounter
+      node.data = {
+        ...(node.data ?? {}),
+        mfCaptionNo: numbered(n),
+        mfCaptionTitle: title,
+        mfCaptionKind: isFig ? 'fig' : 'tab',
+      }
+      if (id) {
+        const label = `${isFig ? (ctx.lang === 'en' ? 'Figure' : '图') : ctx.lang === 'en' ? 'Table' : '表'} ${numbered(n)}`
+        ctx.refs.push({
+          kind: isFig ? 'fig' : 'tab',
+          id: bareId(id),
+          anchor: anchorOf(id),
+          label,
+          detail: title ? `· ${title}` : '',
+        })
+      }
+      if (node.children) for (const c of node.children) walk(c, isFig || inFigure)
+      return
+    }
+
+    // 单独成段的图片：`![题注](src)` 直接排成带图号的插图
+    if (node.type === 'paragraph' && !inFigure) {
+      const kids = (node.children ?? []).filter(
+        (c: any) => !(c.type === 'text' && !String(c.value ?? '').trim())
+      )
+      const img = kids.find((c: any) => c.type === 'image')
+      if (img && (img.alt ?? '').trim()) {
+        ctx.figCounter++
+        const attrText = kids
+          .filter((c: any) => c !== img && c.type === 'text')
+          .map((c: any) => String(c.value ?? ''))
+          .join(' ')
+        const id = /#([A-Za-z0-9_\u4e00-\u9fa5:-]+)/.exec(attrText)?.[1]
+        node.data = {
+          ...(node.data ?? {}),
+          mfImageFig: true,
+          mfCaptionNo: numbered(ctx.figCounter),
+          mfCaptionTitle: String(img.alt ?? '').trim(),
+          mfFigId: id,
+        }
+        if (id) {
+          ctx.refs.push({
+            kind: 'fig',
+            id: bareId(id),
+            anchor: anchorOf(id),
+            label: `${ctx.lang === 'en' ? 'Figure' : '图'} ${numbered(ctx.figCounter)}`,
+            detail: `· ${String(img.alt ?? '').trim()}`,
+          })
+        }
+        return
+      }
     }
 
     if (node.type === 'math') {
@@ -413,7 +545,7 @@ function collect(tree: any, ctx: Ctx) {
       }
     }
 
-    if (node.children) for (const c of node.children) walk(c)
+    if (node.children) for (const c of node.children) walk(c, inFigure)
   }
   for (const c of tree.children ?? []) walk(c)
 
@@ -441,10 +573,17 @@ function renderBlock(node: any, ctx: Ctx): string {
       }
       const id = node.data?.mfId ?? `h-${Math.random().toString(36).slice(2, 8)}`
       const tag = `h${Math.min(6, node.depth)}`
-      return `<${tag} id="${id}" class="mf-heading mf-h${node.depth}">${renderInline(children, ctx)}</${tag}>`
+      const no = node.data?.mfHeadingNo as string | undefined
+      // 编号与标题之间用实心间隔，中文排版里比纯空格稳
+      const noHtml = no ? `<span class="mf-h-no">${escapeHtml(no)}</span>` : ''
+      return `<${tag} id="${id}" class="mf-heading mf-h${node.depth}">${noHtml}${renderInline(children, ctx)}</${tag}>`
     }
     case 'paragraph':
       if (PAGEBREAK_TEXT_RE.test(textOf(node))) return pageBreakHtml()
+      if (node.data?.mfImageFig) {
+        const img = (node.children ?? []).find((c: any) => c.type === 'image')
+        if (img) return renderImageFigure(node, img, ctx)
+      }
       return `<p class="mf-p">${renderInline(node.children ?? [], ctx)}</p>`
 
     case 'text':
@@ -554,6 +693,7 @@ const KIND_ALIASES = new Set([
   'eq', 'thm', 'lem', 'def', 'prop', 'cor', 'exa', 'prf', 'alg', 'sec', 'fig', 'tab',
   'theorem', 'lemma', 'definition', 'proposition', 'corollary', 'example', 'proof',
   'algorithm', 'remark', 'note', 'equation',
+  'exe', 'sol', 'exercise', 'solution',
 ])
 
 /** 去掉 kind: 前缀，得到裸 id（`def:contraction` -> `contraction`） */
@@ -592,7 +732,7 @@ const PAGEBREAK_TEXT_RE = /^\s*(?:\\(?:newpage|pagebreak|clearpage)\b[ \t]*|<!--
 /** 证毕符号插在最后一个段落末尾，保证它落在框内、紧跟着最后一句 */
 function appendQed(html: string, symbol: string): string {
   if (!symbol) return html
-  const q = `<span class="mf-qed" aria-hidden="true">${escapeHtml(symbol)}</span>`
+  const q = `<span class="mf-qed" data-mf-only-last="1" aria-hidden="true">${escapeHtml(symbol)}</span>`
   if (/<\/p>\s*$/.test(html)) return html.replace(/<\/p>\s*$/, `${q}</p>`)
   return `${html}${q}`
 }
@@ -600,6 +740,9 @@ function appendQed(html: string, symbol: string): string {
 function renderContainer(node: any, ctx: Ctx): string {
   const name: string = node.name
   if (name === 'pagebreak' || name === 'newpage' || name === 'clearpage') return pageBreakHtml()
+  if (name === 'toc' || name === 'contents' || name === 'tableofcontents') return renderToc(ctx)
+  if (name === 'figure') return renderFigureBlock(node, ctx)
+  if (name === 'table') return renderTableBlock(node, ctx)
   const meta = THM_TYPES[name]
   const id: string | undefined = node.attributes?.id
   const { title, children } = directiveTitle(node)
@@ -618,10 +761,11 @@ function renderContainer(node: any, ctx: Ctx): string {
       const m = ctx.thmMeta.get(id)
       if (m) m.previewHtml = inner
     }
-    return `<div class="mf-thm mf-proof${langClass}"${id ? ` id="${anchorOf(id)}"` : ''}>
-      <div class="mf-thm-body"><span class="mf-proof-q">${en ? 'Proof.' : '证'}</span>${
+    // data-mf-splittable：长证明允许跨页（分页器会把正文段落切开、分到两页上）
+    return `<div class="mf-thm mf-proof${langClass}" data-mf-splittable="1"${id ? ` id="${anchorOf(id)}"` : ''}>
+      <div class="mf-thm-body" data-mf-flow="1"><span class="mf-proof-q" data-mf-only-first="1">${en ? 'Proof.' : '证'}</span>${
         title
-          ? `<span class="mf-proof-title">${en ? ` (${escapeHtml(title)})` : `（${escapeHtml(title)}）`}</span>`
+          ? `<span class="mf-proof-title" data-mf-only-first="1">${en ? ` (${escapeHtml(title)})` : `（${escapeHtml(title)}）`}</span>`
           : ''
       }${appendQed(inner, ctx.qed)}</div>
     </div>`
@@ -634,6 +778,19 @@ function renderContainer(node: any, ctx: Ctx): string {
     }
     return `<div class="mf-thm mf-thm-remark${langClass}"${id ? ` id="${anchorOf(id)}"` : ''}>
       <div class="mf-thm-body"><span class="mf-thm-inline-label">${en ? meta.en : meta.cn}</span>${inner}</div>
+    </div>`
+  }
+
+  // 解答：跟着上面的习题走，不编号、不加证毕符号，正文用正文字体
+  if (meta.env === 'solution') {
+    if (id) {
+      const m = ctx.thmMeta.get(id)
+      if (m) m.previewHtml = inner
+    }
+    return `<div class="mf-thm mf-solution${langClass}" data-mf-splittable="1"${id ? ` id="${anchorOf(id)}"` : ''}>
+      <div class="mf-thm-body" data-mf-flow="1"><span class="mf-sol-q" data-mf-only-first="1">${en ? 'Solution.' : '解'}</span>${
+        title ? `<span class="mf-proof-title" data-mf-only-first="1">${en ? ` (${escapeHtml(title)})` : `（${escapeHtml(title)}）`}</span>` : ''
+      }${inner}</div>
     </div>`
   }
 
@@ -652,6 +809,84 @@ function renderContainer(node: any, ctx: Ctx): string {
     }</div>
     <div class="mf-thm-body">${inner}</div>
   </div>`
+}
+
+/* ------------------------------------------------------------------ *
+ *  目录 / 插图 / 表格题注 / 脚注
+ * ------------------------------------------------------------------ */
+
+function renderToc(ctx: Ctx): string {
+  if (!ctx.toc.length) {
+    return `<nav class="mf-toc"><div class="mf-toc-title">${ctx.lang === 'en' ? 'Contents' : '目录'}</div><div class="mf-toc-empty">（还没有标题）</div></nav>`
+  }
+  const items = ctx.toc
+    .map((t) => {
+      const indent = Math.max(0, Math.min(5, t.level - 1)) * 1.5
+      const label = `${t.no ? `${escapeHtml(t.no)}　` : ''}${escapeHtml(t.text || '（无标题）')}`
+      return `<li class="mf-toc-row" data-level="${t.level}" style="--mf-toc-indent:${indent}em"><a class="mf-toc-link" href="#${t.id}">${label}</a><span class="mf-toc-dots"></span><span class="mf-toc-page" data-mf-toc-anchor="${t.id}"></span></li>`
+    })
+    .join('')
+  return `<nav class="mf-toc" data-mf-toc="1"><div class="mf-toc-title">${ctx.lang === 'en' ? 'Contents' : '目录'}</div><ol class="mf-toc-list">${items}</ol></nav>`
+}
+
+function caption(noHtml: string, title: string | undefined): string {
+  return `<span class="mf-caption-no">${noHtml}</span>${title ? `<span class="mf-caption-title">${escapeHtml(title)}</span>` : ''}`
+}
+
+function renderFigureBlock(node: any, ctx: Ctx): string {
+  const id: string | undefined = node.attributes?.id
+  const { title, children } = directiveTitle(node)
+  const no = node.data?.mfCaptionNo as string | undefined
+  const kind = ctx.lang === 'en' ? 'Figure' : '图'
+  return `<figure class="mf-figure"${id ? ` id="${anchorOf(id)}"` : ''}>${renderChildren(children, ctx)}${
+    no ? `<figcaption class="mf-caption">${caption(`${kind} ${no}`, title)}</figcaption>` : ''
+  }</figure>`
+}
+
+function renderTableBlock(node: any, ctx: Ctx): string {
+  const id: string | undefined = node.attributes?.id
+  const { title, children } = directiveTitle(node)
+  const no = node.data?.mfCaptionNo as string | undefined
+  const kind = ctx.lang === 'en' ? 'Table' : '表'
+  return `<div class="mf-table-block"${id ? ` id="${anchorOf(id)}"` : ''}>${
+    no ? `<div class="mf-caption mf-caption-top">${caption(`${kind} ${no}`, title)}</div>` : ''
+  }${renderChildren(children, ctx)}</div>`
+}
+
+function renderImageFigure(node: any, img: any, ctx: Ctx): string {
+  const id = node.data?.mfFigId as string | undefined
+  const no = node.data?.mfCaptionNo as string | undefined
+  const title = node.data?.mfCaptionTitle as string | undefined
+  const kind = ctx.lang === 'en' ? 'Figure' : '图'
+  return `<figure class="mf-figure"${id ? ` id="${anchorOf(id)}"` : ''}><img class="mf-img" src="${escapeHtml(
+    img.url ?? ''
+  )}" alt="${escapeHtml(img.alt ?? '')}" />${
+    no ? `<figcaption class="mf-caption">${caption(`${kind} ${no}`, title)}</figcaption>` : ''
+  }</figure>`
+}
+
+/** 脚注引用：按首次出现顺序编号，同一脚注多次引用共用一号 */
+function renderFootnoteRef(identifier: string, ctx: Ctx): string {
+  const key = String(identifier ?? '')
+  let n = ctx.fnNumbers.get(key)
+  if (!n) {
+    n = ctx.fnNumbers.size + 1
+    ctx.fnNumbers.set(key, n)
+    ctx.fnOrder.push(key)
+  }
+  return `<sup class="mf-fn-ref" id="fnref-${n}"><a href="#fn-${n}" data-fn="${n}">${n}</a></sup>`
+}
+
+function renderFootnotes(ctx: Ctx): string {
+  if (!ctx.fnOrder.length) return ''
+  const items = ctx.fnOrder
+    .map((key, i) => {
+      const def = ctx.fnDefs.get(key)
+      const inner = def ? renderChildren(def.children ?? [], ctx) : '<p class="mf-p">（脚注内容缺失）</p>'
+      return `<li id="fn-${i + 1}" class="mf-fn-item"><span class="mf-fn-no">${i + 1}</span><div class="mf-fn-body">${inner}</div></li>`
+    })
+    .join('')
+  return `<section class="mf-footnotes" data-mf-footnotes="1"><div class="mf-fn-title">${ctx.lang === 'en' ? 'Notes' : '注释'}</div><ol class="mf-fn-list">${items}</ol></section>`
 }
 
 function renderTable(node: any, ctx: Ctx): string {
@@ -709,7 +944,7 @@ function renderInlineNode(node: any, ctx: Ctx): string {
     case 'html':
       return node.value ?? ''
     case 'footnoteReference':
-      return ''
+      return renderFootnoteRef(String(node.identifier ?? node.label ?? ''), ctx)
     default:
       if (node.children) return renderInline(node.children, ctx)
       return escapeHtml(node.value ?? '')
@@ -720,8 +955,25 @@ const CITE_SRC = /\[@([A-Za-z0-9_\-:.]+(?:\s*[;,]\s*@?[A-Za-z0-9_\-:.]+)*)\]/.so
 const REF_SRC = /@(eq|thm|lem|def|prop|cor|exa|prf|alg|sec|fig|tab):([A-Za-z0-9_\-:.]+)/.source
 /** LaTeX 风格的 \ref{eq:x} / \eqref{eq:x} */
 const TEXREF_SRC = /\\(?:eq|c|auto|page)?ref\*?\{([^{}]+)\}/.source
-/** 正文里直接说「由定理 1.1」「见式 (2)」——能对上编号就自动变成链接 */
-const MENTION_SRC = /(定理|引理|定义|命题|推论|例题|注|算法|式|公式)[ \t]*[（(]?[ \t]*(\d+(?:[.\-–]\d+)*)[ \t]*[）)]?/.source
+/** 正文里直接说「由定理 1.1」「见式 (2)」「如图 3.1」——能对上编号就自动变成链接 */
+const MENTION_SRC = /(定理|引理|定义|命题|推论|例题|习题|注|算法|式|公式|图|表)[ \t]*[（(]?[ \t]*(\d+(?:[.\-–]\d+)*)[ \t]*[）)]?/.source
+
+/** 标签自带的前缀词，例如「图 3.1」的「图」、「Figure 3.1」的「Figure」 */
+const LABEL_PREFIX = /^([^\s\d（(]{1,12})\s*[\d（(]/
+
+/**
+ * 正文里已经写了「图」，链接标签又带一遍「图」，会拼成「图 图 3.1」。
+ * 发现紧邻前文以同样的前缀词收尾时，把前文里重复的那个词去掉。
+ */
+function dedupeLabelPrefix(lead: string, label: string | undefined): string {
+  if (!label) return lead
+  const m = LABEL_PREFIX.exec(label)
+  if (!m) return lead
+  const word = m[1]
+  const trimmed = lead.replace(/[ \t\u00a0]+$/, '')
+  if (!trimmed.endsWith(word)) return lead
+  return trimmed.slice(0, trimmed.length - word.length)
+}
 
 function normMention(s: string): string {
   return s.replace(/[\s\u00a0]/g, '').replace(/（/g, '(').replace(/）/g, ')')
@@ -759,20 +1011,53 @@ function renderPlainText(text: string, ctx: Ctx): string {
   let m: RegExpExecArray | null
   while ((m = combined.exec(text))) {
     const raw = m[0]
-    html += escapeHtml(text.slice(last, m.index))
+    const lead = text.slice(last, m.index)
     if (m[1] !== undefined) {
+      html += escapeHtml(lead)
       html += renderCitation(m[1], ctx)
     } else if (m[2] !== undefined) {
+      // 「图 @fig:loss」→ 前面那个「图」和标签里的「图」重了，先去掉再拼
+      html += escapeHtml(dedupeLabelPrefix(lead, refLabel(m[2], m[3], ctx)))
       html += renderRef(m[2], m[3], ctx)
     } else if (m[4] !== undefined) {
+      html += escapeHtml(dedupeLabelPrefix(lead, texRefLabel(m[4], ctx)))
       html += renderTexRef(m[4], raw, ctx)
     } else if (m[5] !== undefined) {
+      html += escapeHtml(lead)
       html += renderMention(raw, ctx)
     }
     last = m.index + raw.length
   }
   html += escapeHtml(text.slice(last))
   return html
+}
+
+/** 找出 @kind:id 指向的条目（当前文件优先） */
+function findRef(kind: string, id: string, ctx: Ctx): RefEntry | undefined {
+  const bare = bareId(id)
+  return (
+    ctx.refs.find((r) => r.id === bare && r.kind === kind) ??
+    // 前缀写错（例如把 def 写成 thm）时，只要 id 唯一仍然给链接，避免变成红字
+    ctx.refs.find((r) => r.id === bare)
+  )
+}
+
+/** 当前文件里没有时，去工作区其他文件的引用表里找 */
+function findExtRef(kind: string, id: string, ctx: Ctx): RefEntry | undefined {
+  const bare = bareId(id)
+  return ctx.extRefs.find((r) => r.id === bare && r.kind === kind) ?? ctx.extRefs.find((r) => r.id === bare)
+}
+
+function refLabel(kind: string, id: string, ctx: Ctx): string | undefined {
+  return (findRef(kind, id, ctx) ?? findExtRef(kind, id, ctx))?.label
+}
+
+function texRefLabel(id: string, ctx: Ctx): string | undefined {
+  const bare = bareId(id)
+  return (
+    ctx.refs.find((r) => r.id === bare && (!id.includes(':') || id.startsWith(`${r.kind}:`))) ??
+    ctx.refs.find((r) => r.id === bare)
+  )?.label
 }
 
 /** `\ref{eq:x}`：和 @eq:x 等价，但允许直接写 LaTeX 习惯的写法 */
@@ -783,9 +1068,7 @@ function renderTexRef(id: string, raw: string, ctx: Ctx): string {
     ctx.refs.find((r) => r.id === bare)
   if (entry) return refLink(entry, entry.label, 'mf-ref-tex')
   return `<span class="mf-ref-broken" title="未找到引用目标 ${escapeHtml(raw)}">${escapeHtml(raw)}?</span>`
-}
-
-/** 正文里的「定理 1.1」：编号能对上就加链接，对不上就原样保留 */
+}/** 正文里的「定理 1.1」：编号能对上就加链接，对不上就原样保留 */
 function renderMention(raw: string, ctx: Ctx): string {
   const core = raw.replace(/[\s\u00a0]+$/, '')
   const tail = raw.slice(core.length)
@@ -795,17 +1078,13 @@ function renderMention(raw: string, ctx: Ctx): string {
 }
 
 function renderRef(kind: string, id: string, ctx: Ctx): string {
-  const bare = bareId(id)
-  const entry =
-    ctx.refs.find((r) => r.id === bare && r.kind === kind) ??
-    // 前缀写错（例如把 def 写成 thm）时，只要 id 唯一仍然给链接，避免变成红字
-    ctx.refs.find((r) => r.id === bare)
+  const entry = findRef(kind, id, ctx)
   if (entry) {
     return refLink(entry, entry.label)
   }
 
   // 当前文件里没有目标 —— 看看是不是工作区里别的文件定义的
-  const ext = ctx.extRefs.find((r) => r.id === bare && r.kind === kind) ?? ctx.extRefs.find((r) => r.id === bare)
+  const ext = findExtRef(kind, id, ctx)
   if (ext?.file) {
     const anchor = ext.anchor.includes('#') ? ext.anchor.slice(ext.anchor.indexOf('#') + 1) : ext.anchor
     // 导出成静态站点时，链接指向同目录下编译好的 .html，浏览器里能直接跳过去
@@ -860,6 +1139,25 @@ function shortAuthor(author: string): string {
   return first.split(/\s+/).slice(-1)[0] ?? first
 }
 
+const BIB_TYPE_MARK: Record<string, string> = {
+  article: '[J]', journal: '[J]',
+  book: '[M]', monograph: '[M]',
+  inproceedings: '[C]', conference: '[C]', proceedings: '[C]',
+  incollection: '[M]',
+  phdthesis: '[D]', mastersthesis: '[D]', thesis: '[D]',
+  techreport: '[R]', report: '[R]',
+  standard: '[S]', patent: '[P]',
+  misc: '[EB/OL]', online: '[EB/OL]', webpage: '[EB/OL]',
+}
+
+/** GB/T 7714 风格的文献类型标识：作者. 题名[J]. 刊名, 年. */
+function bibTypeMark(type: string): string {
+  const t = String(type ?? '').trim()
+  if (!t) return ''
+  if (t.startsWith('[')) return t
+  return BIB_TYPE_MARK[t.toLowerCase()] ?? ''
+}
+
 function renderBibliography(ctx: Ctx): string {
   if (!ctx.citations.length) return ''
   const items = ctx.citations.map((key, i) => {
@@ -867,10 +1165,18 @@ function renderBibliography(ctx: Ctx): string {
     if (!e) {
       return `<li id="ref-${slug(key)}" class="mf-bib-item"><span class="mf-bib-index">[${i + 1}]</span><span class="mf-bib-missing">未找到文献条目 <code>${escapeHtml(key)}</code>，请在「参考文献」面板中补充。</span></li>`
     }
-    const src = e.journal ? `${e.journal}` : ''
-    return `<li id="ref-${slug(key)}" class="mf-bib-item"><span class="mf-bib-index">[${i + 1}]</span><span class="mf-bib-author">${escapeHtml(e.author)}</span>. <span class="mf-bib-title">${escapeHtml(e.title)}</span>. <span class="mf-bib-src">${escapeHtml(src)}</span>, ${escapeHtml(e.year)}.</li>`
+    const mark = bibTypeMark(e.type)
+    const src = e.journal ? `<span class="mf-bib-src">${escapeHtml(e.journal)}</span>, ` : ''
+    // 作者名常以缩写点结尾（Knuth, Donald E.），再补一个句点会变成两个
+    const authorDot = /[.．]$/.test(String(e.author ?? '').trim()) ? '' : '.'
+    return `<li id="ref-${slug(key)}" class="mf-bib-item"><span class="mf-bib-index">[${i + 1}]</span><span class="mf-bib-text"><span class="mf-bib-author">${escapeHtml(
+      e.author
+    )}</span>${authorDot} <span class="mf-bib-title">${escapeHtml(e.title)}</span>${mark ? `<span class="mf-bib-type">${escapeHtml(mark)}</span>` : ''}. ${src}${escapeHtml(
+      e.year
+    )}.</span></li>`
   })
-  return `<section class="mf-bib"><h2 class="mf-heading mf-h2">参考文献</h2><ol class="mf-bib-list">${items.join('')}</ol></section>`
+  const title = ctx.lang === 'en' ? 'References' : '参考文献'
+  return `<section class="mf-bib"><h2 class="mf-heading mf-h2 mf-bib-heading">${title}</h2><ol class="mf-bib-list">${items.join('')}</ol></section>`
 }
 
 /** 把预览内的引用预览数据汇总（供 AcademicPreview 悬停卡片使用） */
