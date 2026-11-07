@@ -98,6 +98,9 @@ export interface AIConfig {
   visionModel: string
 }
 
+/** 单个「字体角色」的可选值：宋体 / 黑体 / 楷体 / 跟随正文 / 自定义 */
+export type RoleFontKey = 'serif' | 'sans' | 'kai' | 'follow' | 'custom'
+
 export interface Settings {
   autoNumberEquations: boolean
   citationStyle: 'numeric' | 'author-year'
@@ -112,6 +115,21 @@ export interface Settings {
   previewFontSize: number
   previewLineHeight: number
   previewWeight: 400 | 500 | 600
+  /* ---- 字体搭配：中西文分开，一处一处都能换 ---- */
+  /** 预设：论文（宋体 + Times）/ 讲义（楷体 + Times）/ 简洁（黑体）；手动改任一项后变 custom */
+  fontPairing: 'paper' | 'lecture' | 'clean' | 'custom'
+  /** 正文西文字体。CSS 逐字回退：西文走 Times，中文仍落到后面的宋体，不需要两套字体文件 */
+  bodyLatin: 'times' | 'lm' | 'georgia' | 'follow' | 'custom'
+  bodyLatinCustom: string
+  /** 定理 / 习题等环境的标题字体（一律加粗） */
+  thmHeadFont: RoleFontKey
+  thmHeadFontCustom: string
+  /** 证明行首「证」的字体（一律加粗） */
+  proofMarkFont: RoleFontKey
+  proofMarkFontCustom: string
+  /** 解答行首「解」的字体（一律加粗） */
+  solMarkFont: RoleFontKey
+  solMarkFontCustom: string
   /* ---- 外观：源码（编辑区）---- */
   editorFont: 'serif' | 'mono' | 'sans' | 'kai'
   editorFontCustom: string
@@ -162,7 +180,17 @@ export const DEFAULT_SETTINGS: Settings = {
   previewFontCustom: '',
   previewFontSize: 16.5,
   previewLineHeight: 1.9,
-  previewWeight: 400,
+  // 宋体在屏幕上偏细，默认给 500：思源宋体用真实的 Medium，系统宋体则轻微合成加厚
+  previewWeight: 500,
+  fontPairing: 'paper',
+  bodyLatin: 'times',
+  bodyLatinCustom: '',
+  thmHeadFont: 'sans',
+  thmHeadFontCustom: '',
+  proofMarkFont: 'kai',
+  proofMarkFontCustom: '',
+  solMarkFont: 'serif',
+  solMarkFontCustom: '',
   editorFont: 'serif',
   editorFontCustom: '',
   editorFontSize: 15,
@@ -174,7 +202,8 @@ export const DEFAULT_SETTINGS: Settings = {
   thmStyle: 'classic',
   qedSymbol: '∎',
   mathStyle: 'soft',
-  thmBodyKai: true,
+  // 论文默认：定理正文也走宋体；讲义风格可以在设置里勾回楷体
+  thmBodyKai: false,
   pageGuides: true,
   autoSnippet: true,
   pageMarginX: 18,
@@ -195,8 +224,12 @@ export function loadSettings(): Settings {
     if (!raw) return { ...DEFAULT_SETTINGS }
     const parsed = JSON.parse(raw) as Partial<Settings>
     const out: Settings = { ...DEFAULT_SETTINGS, ...parsed }
+    // 老配置（1.0.8 之前）没有 fontPairing：顺手把默认字重从 400 提到 500，
+    // 不然升级后「宋体太细」的问题依旧，用户会以为改动没生效。
+    const legacy = parsed.fontPairing === undefined && parsed.bodyLatin === undefined
+    if (legacy && out.previewWeight === 400) out.previewWeight = 500
     // 防御：越界或类型不对的值逐个纠正，避免把界面弄坏
-    if (![400, 500, 600].includes(out.previewWeight)) out.previewWeight = 400
+    if (![400, 500, 600].includes(out.previewWeight)) out.previewWeight = 500
     out.previewFontSize = clampNum(out.previewFontSize, 13, 24, 16.5)
     out.previewLineHeight = clampNum(out.previewLineHeight, 1.4, 2.6, 1.9)
     out.editorFontSize = clampNum(out.editorFontSize, 11, 20, 15)
@@ -212,7 +245,7 @@ export function loadSettings(): Settings {
     if (typeof out.exportFontCustom !== 'string') out.exportFontCustom = ''
     if (typeof out.qedSymbol !== 'string') out.qedSymbol = '∎'
     if (typeof out.pageGuides !== 'boolean') out.pageGuides = true
-    if (typeof out.thmBodyKai !== 'boolean') out.thmBodyKai = true
+    if (typeof out.thmBodyKai !== 'boolean') out.thmBodyKai = false
     // 数学输入 / 版面
     if (typeof out.autoSnippet !== 'boolean') out.autoSnippet = true
     out.pageMarginX = clampNum(out.pageMarginX, 8, 45, 18)
@@ -222,6 +255,17 @@ export function loadSettings(): Settings {
     if (!['none', 'plain', 'dash', 'slash'].includes(out.pageNumber)) out.pageNumber = 'plain'
     if (typeof out.headingNumbering !== 'boolean') out.headingNumbering = false
     if (out.figNumbering !== 'section' && out.figNumbering !== 'global') out.figNumbering = 'section'
+    // 字体搭配
+    if (!['paper', 'lecture', 'clean', 'custom'].includes(out.fontPairing)) out.fontPairing = 'paper'
+    if (!['times', 'lm', 'georgia', 'follow', 'custom'].includes(out.bodyLatin)) out.bodyLatin = 'times'
+    const ROLES: RoleFontKey[] = ['serif', 'sans', 'kai', 'follow', 'custom']
+    if (!ROLES.includes(out.thmHeadFont)) out.thmHeadFont = 'sans'
+    if (!ROLES.includes(out.proofMarkFont)) out.proofMarkFont = 'kai'
+    if (!ROLES.includes(out.solMarkFont)) out.solMarkFont = 'serif'
+    if (typeof out.bodyLatinCustom !== 'string') out.bodyLatinCustom = ''
+    if (typeof out.thmHeadFontCustom !== 'string') out.thmHeadFontCustom = ''
+    if (typeof out.proofMarkFontCustom !== 'string') out.proofMarkFontCustom = ''
+    if (typeof out.solMarkFontCustom !== 'string') out.solMarkFontCustom = ''
     return out
   } catch {
     return { ...DEFAULT_SETTINGS }
@@ -933,6 +977,15 @@ export const useEditorStore = create<EditorState>()(
             previewFontSize: DEFAULT_SETTINGS.previewFontSize,
             previewLineHeight: DEFAULT_SETTINGS.previewLineHeight,
             previewWeight: DEFAULT_SETTINGS.previewWeight,
+            fontPairing: DEFAULT_SETTINGS.fontPairing,
+            bodyLatin: DEFAULT_SETTINGS.bodyLatin,
+            bodyLatinCustom: DEFAULT_SETTINGS.bodyLatinCustom,
+            thmHeadFont: DEFAULT_SETTINGS.thmHeadFont,
+            thmHeadFontCustom: DEFAULT_SETTINGS.thmHeadFontCustom,
+            proofMarkFont: DEFAULT_SETTINGS.proofMarkFont,
+            proofMarkFontCustom: DEFAULT_SETTINGS.proofMarkFontCustom,
+            solMarkFont: DEFAULT_SETTINGS.solMarkFont,
+            solMarkFontCustom: DEFAULT_SETTINGS.solMarkFontCustom,
             editorFont: DEFAULT_SETTINGS.editorFont,
             editorFontCustom: DEFAULT_SETTINGS.editorFontCustom,
             editorFontSize: DEFAULT_SETTINGS.editorFontSize,

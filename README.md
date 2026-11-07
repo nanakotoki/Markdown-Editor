@@ -33,7 +33,7 @@ MathFlow 把「写作」和「公式」放在同一个光标里：正文用 Mark
 ### 方式一：安装版（Windows，推荐；要发给别人就发这个）
 
 ```
-release\installer\MathFlow-Setup-1.0.8.exe      （约 109 MB）
+release\installer\MathFlow-Setup-1.0.9.exe      （约 109 MB）
 ```
 
 双击 → 一路「下一步」→ 桌面和开始菜单出现 MathFlow 图标，双击即用。
@@ -51,7 +51,7 @@ release\installer\MathFlow-Setup-1.0.8.exe      （约 109 MB）
 ### 方式二：便携版（Windows，免安装）
 
 ```
-release\portable\MathFlow-Portable-1.0.8.exe      （约 109 MB）
+release\portable\MathFlow-Portable-1.0.9.exe      （约 109 MB）
 ```
 
 单文件，双击即用，不写注册表、不进「应用」列表，适合放 U 盘或没有安装权限的电脑。
@@ -65,13 +65,13 @@ release\portable\MathFlow-Portable-1.0.8.exe      （约 109 MB）
 
 ```
 发给别人/
-├── MathFlow-Setup-1.0.8.exe     安装版
-├── MathFlow-Portable-1.0.8.exe     便携版
+├── MathFlow-Setup-1.0.9.exe     安装版
+├── MathFlow-Portable-1.0.9.exe     便携版
 ├── 使用说明.txt                  给非技术用户的一页说明（含 SmartScreen 处理办法）
 └── SHA256.txt                    校验值，对方可自行核对
 ```
 
-对方只需要做一件事：双击 `MathFlow-Setup-1.0.8.exe`，下一步、下一步、完成。
+对方只需要做一件事：双击 `MathFlow-Setup-1.0.9.exe`，下一步、下一步、完成。
 
 重新生成这套产物（会依次做前端构建 → 图标 → 打包 → 归档）：
 
@@ -277,12 +277,25 @@ export/
 
 | 可调 | 范围 |
 | --- | --- |
+| 字体搭配 | 论文 / 讲义 / 简洁 三套预设，或逐项自由搭配 |
 | 正文（渲染结果）字体 | 思源宋体 / 宋体 / 楷体 / 黑体，按「装了就用」回退 |
-| 正文字号 · 行距 · 字重 | 13–24px · 1.4–2.6 · 常规/中等/加粗 |
+| 正文字号 · 行距 · 字重 | 13–24px · 1.4–2.6 · 常规/中等/加粗（默认 500） |
 | 源码（编辑区）字体 | 衬线 / 等宽 / 无衬线 / 霞鹜文楷 |
 | 源码字号 | 11–20px |
 
-* 嫌系统宋体发细：选「黑体」，或把字重调到「加粗」；装了 Source Han Serif / 思源宋体会优先使用
+**字体搭配**默认「论文」，一套固定搭配解决九成情况：
+
+| 角色 | 默认 | 说明 |
+| --- | --- | --- |
+| 正文中文 | 宋体（思源宋体优先） | 字重默认为 500，比系统宋体的常规档略厚 |
+| 正文西文 | **Times New Roman** | 与宋体字脚高度接近，混排基线不跳 |
+| 环境标题（定理 / 习题…） | 黑体 **加粗** | 和宋体正文拉开层次 |
+| 证明的「证」 | 楷体 **加粗** | 楷体是批注体，加粗后不弱于正文 |
+| 解答的「解」 | 正文 **加粗** | 与题干同族，看得出是一组 |
+
+* 中英混排的实现是 CSS 逐字回退：`font-family: 'Times New Roman', …宋体…` —— 拉丁字母在 Times 里取字形，汉字在 Times 里没有，落到宋体，不需要两套字体文件
+* 不满预设就展开「逐项自由搭配」，五个角色各选各的；改过任一项即记为「自定义」
+* 嫌字细：字重调「加粗」；装了 Source Han Serif / 思源宋体会用真实的 Medium / SemiBold
 * 改动即时生效，存 `localStorage` 的 `mf-settings-v1`，重启保留；「恢复默认」一键回到初始外观
 
 ---

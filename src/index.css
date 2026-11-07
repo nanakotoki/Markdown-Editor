@@ -3,18 +3,23 @@
 @tailwind utilities;
 
 :root {
-  --mf-serif: 'Latin Modern Roman', 'Source Han Serif SC', 'Noto Serif CJK SC', 'Songti SC', 'STSong', 'SimSun', Georgia, serif;
+  /* 正文默认：西文 Times New Roman + 中文宋体。CSS 逐字回退，两段字体名就能混排 */
+  --mf-serif: 'Times New Roman', 'Nimbus Roman No9 L', 'Liberation Serif', Times, 'Source Han Serif SC', 'Noto Serif CJK SC', 'Songti SC', 'STSong', 'SimSun', serif;
   --mf-sans: 'Inter', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
   --mf-mono: 'JetBrains Mono', 'Cascadia Code', 'Consolas', monospace;
   /* 外观设置会在运行时改写下面这几个变量（见 core/appearance.ts） */
   --mf-academic-size: 16.5px;
   --mf-academic-leading: 1.9;
-  --mf-academic-weight: 400;
+  --mf-academic-weight: 500;
   --mf-editor-font: 'Latin Modern Roman', 'Songti SC', 'STSong', 'SimSun', Georgia, serif;
   --mf-editor-size: 15px;
   /* 楷体：定理正文、证明里的「证」字用它。装了霞鹜文楷会优先用，
      没有就退到系统楷体；再没有才落到宋体，不会出现方框。 */
   --mf-kai: 'LXGW WenKai', 'Kaiti SC', 'STKaiti', 'KaiTi', 'Source Han Serif SC', 'Noto Serif CJK SC', 'Songti SC', serif;
+  /* 三个字体角色的默认值，设置里的「字体搭配」会覆盖它们 */
+  --mf-thm-head-font: var(--mf-sans);
+  --mf-proof-mark-font: var(--mf-kai);
+  --mf-sol-mark-font: var(--mf-serif);
   --mf-ink: #1f2733;
   --mf-ink-soft: #5d6779;
   --mf-rule: #1f2733;
@@ -266,7 +271,7 @@ body {
   color: var(--mf-ink);
   font-size: var(--mf-academic-size, 16.5px);
   line-height: var(--mf-academic-leading, 1.9);
-  font-weight: var(--mf-academic-weight, 400);
+  font-weight: var(--mf-academic-weight, 500);
   letter-spacing: 0.005em;
 }
 
@@ -558,22 +563,22 @@ body {
   --mf-thm-line: #c6ccd8;
 }
 .mf-thm-head {
-  font-family: var(--mf-sans);
-  /* 与正文同字号、纯黑；黑体本身已经够重，再加 800 会显得发肥 */
+  /* 环境标题：默认黑体加粗。字体可在「字体与外观 → 字体搭配」里单独换 */
+  font-family: var(--mf-thm-head-font, var(--mf-sans));
   font-size: 1em;
-  font-weight: 400;
+  font-weight: 800;
   letter-spacing: 0.01em;
   margin-bottom: 0.28em;
   color: #000;
 }
 .mf-thm-label {
-  font-family: var(--mf-sans);
-  font-weight: 500;
+  font-family: inherit;
+  font-weight: 800;
   color: inherit;
 }
 .mf-thm-title {
-  font-family: var(--mf-sans);
-  font-weight: 400;
+  font-family: inherit;
+  font-weight: 800;
   color: #000;
 }
 .mf-thm-body {
@@ -621,7 +626,7 @@ body {
   background: #fbfbfc;
 }
 .mf-thm-inline-label {
-  font-family: var(--mf-sans);
+  font-family: var(--mf-thm-head-font, var(--mf-sans));
   font-weight: 800;
   margin-right: 0.4em;
   color: #000;
@@ -639,8 +644,9 @@ body {
 .mf-proof-q {
   float: left;
   margin-right: 0.3em;
-  font-family: var(--mf-sans);
-  font-weight: 500;
+  /* 「证」用楷体加粗：楷体本身笔画细，加粗后才压得住后面的宋体正文 */
+  font-family: var(--mf-proof-mark-font, var(--mf-kai));
+  font-weight: 700;
   color: #000;
   line-height: 1.85;
   text-indent: 0;
@@ -1092,7 +1098,7 @@ body {
   /* 屏幕与打印用同一套数值：看到的换页就是 PDF 的换页 */
   font-size: var(--mf-academic-size, 16px);
   line-height: var(--mf-academic-leading, 1.8);
-  font-weight: var(--mf-academic-weight, 400);
+  font-weight: var(--mf-academic-weight, 500);
 }
 .mf-sheet .mf-academic {
   font-size: inherit;

@@ -1,7 +1,7 @@
 {
   "name": "mathflow",
   "private": true,
-  "version": "1.0.8",
+  "version": "1.0.9",
   "type": "module",
   "description": "MathFlow - Markdown 为主、LaTeX 为辅的新一代混合学术编辑器",
   "bin": {

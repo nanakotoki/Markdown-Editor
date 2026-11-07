@@ -3,7 +3,7 @@ import { getInlinedKatexCss } from './clipboardExport'
 import { ACADEMIC_CSS } from './academicCss'
 import type { MacroMap } from './katexSafeRender'
 import { DEFAULT_SETTINGS, type BibEntry, type Settings } from '../store/useEditorStore'
-import { KAI_STACK, resolveExportStack } from './appearance'
+import { KAI_STACK, resolveExportStack, roleFontStack } from './appearance'
 
 /**
  * ============================================================================
@@ -51,6 +51,9 @@ export async function buildStandaloneHtml(markdown: string, opts: HtmlExportOpti
   const bodyStyle = [
     `--mf-serif:${exportFont}`,
     `--mf-thm-body-font:${settings.thmBodyKai ? KAI_STACK : exportFont}`,
+    `--mf-thm-head-font:${roleFontStack(settings.thmHeadFont, settings.thmHeadFontCustom, 'sans')}`,
+    `--mf-proof-mark-font:${roleFontStack(settings.proofMarkFont, settings.proofMarkFontCustom, 'kai')}`,
+    `--mf-sol-mark-font:${roleFontStack(settings.solMarkFont, settings.solMarkFontCustom, 'serif')}`,
     `font-size:${settings.previewFontSize}px`,
     `line-height:${settings.previewLineHeight}`,
     `font-weight:${settings.previewWeight}`,

@@ -58,7 +58,8 @@ export const EXTRA_CSS = `
 .mf-thm-exercise .mf-thm-body{font-family:var(--mf-serif)}
 .mf-solution{border-left-color:#94a3b8;background:#fbfbfc}
 .mf-solution .mf-thm-body{font-family:var(--mf-serif);line-height:1.85}
-.mf-sol-q{float:left;margin-right:.3em;font-family:var(--mf-sans);font-weight:500;color:#000;line-height:1.85}
+/* 「解」跟正文同字体、加粗；内容正文保持正文字体 */
+.mf-sol-q{float:left;margin-right:.3em;font-family:var(--mf-sol-mark-font,var(--mf-serif));font-weight:700;color:#000;line-height:1.85}
 .mf-solution .mf-thm-body>.mf-p:first-child{text-indent:0}
 
 /* ---------------- 可跨页容器被拆开后的接缝 ---------------- */

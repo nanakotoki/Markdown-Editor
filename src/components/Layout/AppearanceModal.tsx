@@ -4,13 +4,17 @@ import { Modal } from '../ui'
 import { useEditorStore } from '../../store/useEditorStore'
 import {
   EDITOR_FONTS,
+  FONT_PAIRINGS,
+  LATIN_FONTS,
   PREVIEW_FONTS,
   editorFontStack,
   isFontAvailable,
   previewFontStack,
   type EditorFontKey,
   type PreviewFontKey,
+  type RoleFontKey,
 } from '../../core/appearance'
+import type { Settings } from '../../store/useEditorStore'
 import { eqTagText } from '../../core/numbering'
 
 /**
@@ -27,6 +31,10 @@ export default function AppearanceModal({ open, onClose }: { open: boolean; onCl
   const updateSettings = useEditorStore((s) => s.updateSettings)
   const reset = useEditorStore((s) => s.resetAppearance)
   const mode = useEditorStore((s) => s.mode)
+  /** 「自由搭配」默认收起：绝大多数人用预设就够，展开是给要交稿格式的人 */
+  const [showRoles, setShowRoles] = useState(false)
+  /** 单独改任一角色 = 不再跟随预设，标记成 custom */
+  const setRole = (patch: Partial<Settings>) => updateSettings({ ...patch, fontPairing: 'custom' })
 
   return (
     <Modal
@@ -88,7 +96,75 @@ export default function AppearanceModal({ open, onClose }: { open: boolean; onCl
           <section>
             <SectionTitle>渲染结果（右栏 / 预览 / 导出）</SectionTitle>
 
-            <Row label="字体">
+            {/* ---------------- 字体搭配：默认固定搭配，也可以拆开自由配 ---------------- */}
+            <Row label="字体搭配">
+              <div className="grid grid-cols-3 gap-2">
+                {FONT_PAIRINGS.map((p) => (
+                  <ChoiceCard
+                    key={p.key}
+                    active={settings.fontPairing === p.key}
+                    title={p.label}
+                    note={p.note}
+                    sampleStyle={{ fontFamily: p.sample }}
+                    onClick={() => updateSettings(p.patch)}
+                  />
+                ))}
+              </div>
+              <p className="mt-1.5 text-[11px] leading-relaxed text-ink-400">
+                默认「论文」= 中文宋体 ＋ 西文 Times New Roman，环境标题黑体加粗，「证」楷体加粗、「解」跟正文加粗。
+                Times 的字脚高度与宋体最接近，中英混排时基线不会一高一低；标题换黑体，是为了让「定理 2.1」从宋体正文里跳出来。
+              </p>
+              <button
+                onClick={() => setShowRoles((v) => !v)}
+                className="mt-1.5 text-[11.5px] text-accent-700 hover:underline"
+              >
+                {showRoles ? '收起自由搭配' : '不满意这套？逐项自由搭配'}
+              </button>
+
+              {showRoles && (
+                <div className="mt-2 space-y-1.5 rounded-lg bg-ink-50/70 p-2.5">
+                  <RolePicker
+                    label="西文正文"
+                    value={settings.bodyLatin}
+                    options={LATIN_FONTS.map((f) => ({ v: f.key, label: f.label }))}
+                    onChange={(v) => setRole({ bodyLatin: v as Settings['bodyLatin'] })}
+                    custom={settings.bodyLatinCustom}
+                    onCustom={(v) => setRole({ bodyLatinCustom: v, bodyLatin: 'custom' })}
+                    placeholder="如 Minion Pro"
+                  />
+                  <RolePicker
+                    label="环境标题"
+                    value={settings.thmHeadFont}
+                    options={ROLE_OPTIONS}
+                    onChange={(v) => setRole({ thmHeadFont: v as RoleFontKey })}
+                    custom={settings.thmHeadFontCustom}
+                    onCustom={(v) => setRole({ thmHeadFontCustom: v, thmHeadFont: 'custom' })}
+                    placeholder="如 方正小标宋"
+                  />
+                  <RolePicker
+                    label="证明「证」"
+                    value={settings.proofMarkFont}
+                    options={ROLE_OPTIONS}
+                    onChange={(v) => setRole({ proofMarkFont: v as RoleFontKey })}
+                    custom={settings.proofMarkFontCustom}
+                    onCustom={(v) => setRole({ proofMarkFontCustom: v, proofMarkFont: 'custom' })}
+                  />
+                  <RolePicker
+                    label="解答「解」"
+                    value={settings.solMarkFont}
+                    options={ROLE_OPTIONS}
+                    onChange={(v) => setRole({ solMarkFont: v as RoleFontKey })}
+                    custom={settings.solMarkFontCustom}
+                    onCustom={(v) => setRole({ solMarkFontCustom: v, solMarkFont: 'custom' })}
+                  />
+                  <p className="pt-0.5 text-[10.5px] leading-relaxed text-ink-400">
+                    中文正文在下面单独选；标题、「证」、「解」始终加粗，这里只换字体族。改过任一项就记为「自定义」，三张预设卡片不再高亮。
+                  </p>
+                </div>
+              )}
+            </Row>
+
+            <Row label="中文正文">
               <div className="grid grid-cols-2 gap-2">
                 {PREVIEW_FONTS.map((f) => (
                   <ChoiceCard
@@ -97,7 +173,7 @@ export default function AppearanceModal({ open, onClose }: { open: boolean; onCl
                     title={f.label}
                     note={f.note}
                     sampleStyle={{ fontFamily: previewFontStack(f.key as PreviewFontKey) }}
-                    onClick={() => updateSettings({ previewFont: f.key })}
+                    onClick={() => setRole({ previewFont: f.key })}
                   />
                 ))}
               </div>
@@ -107,7 +183,7 @@ export default function AppearanceModal({ open, onClose }: { open: boolean; onCl
               <FontNameInput
                 value={settings.previewFontCustom}
                 placeholder="已装字体名，如 霞鹜文楷"
-                onChange={(v) => updateSettings({ previewFontCustom: v })}
+                onChange={(v) => setRole({ previewFontCustom: v })}
               />
             </Row>
 
@@ -276,7 +352,7 @@ export default function AppearanceModal({ open, onClose }: { open: boolean; onCl
                     onChange={(e) => updateSettings({ thmBodyKai: e.target.checked })}
                     className="h-3.5 w-3.5 accent-accent-600"
                   />
-                  定理 / 证明正文用楷体（标题始终黑体）
+                  定理正文用楷体（讲义风格；证明始终用正文字体，标题始终黑体）
                 </label>
               </Row>
             </div>
@@ -479,6 +555,60 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
     <div className="mb-3 grid grid-cols-[64px_1fr] items-start gap-3">
       <div className="pt-1.5 text-[12px] text-ink-500">{label}</div>
       <div>{children}</div>
+    </div>
+  )
+}
+
+/** 三个「字体角色」共同的选项：只换字体族，加粗是写死的 */
+const ROLE_OPTIONS = [
+  { v: 'sans', label: '黑体' },
+  { v: 'kai', label: '楷体' },
+  { v: 'serif', label: '正文' },
+]
+
+/**
+ * 一个字体角色（正文中文 / 正文西文 / 环境标题 /「证」/「解」）的选择行。
+ * 选「自定义」时才展开字体名输入框，平时保持一行，不把面板撑高。
+ */
+function RolePicker({
+  label,
+  value,
+  options,
+  onChange,
+  custom,
+  onCustom,
+  placeholder,
+}: {
+  label: string
+  value: string
+  options: Array<{ v: string; label: string }>
+  onChange: (v: string) => void
+  custom?: string
+  onCustom?: (v: string) => void
+  placeholder?: string
+}) {
+  return (
+    <div>
+      <div className="flex items-center gap-1.5">
+        <span className="w-[60px] shrink-0 text-[11.5px] text-ink-500">{label}</span>
+        <select
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="h-6 w-full rounded-md border border-ink-200 bg-white px-1 text-[11.5px] text-ink-700 outline-none focus:border-accent-400"
+        >
+          {options.map((o) => (
+            <option key={o.v} value={o.v}>
+              {o.label}
+            </option>
+          ))}
+          {onCustom && <option value="custom">自定义…</option>}
+        </select>
+      </div>
+      {onCustom && value === 'custom' && (
+        <div className="mt-1 pl-[66px]">
+          <FontNameInput value={custom ?? ''} placeholder={placeholder ?? '字体名'} onChange={onCustom} />
+        </div>
+      )}
     </div>
   )
 }

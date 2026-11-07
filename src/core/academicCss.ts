@@ -15,16 +15,18 @@
 import { EXTRA_CSS } from './extraCss'
 
 export const ACADEMIC_CSS = `
-:root{--mf-serif:'Latin Modern Roman','Songti SC','STSong','Noto Serif CJK SC','SimSun',Georgia,serif;
+:root{--mf-serif:'Times New Roman','Nimbus Roman No9 L','Liberation Serif',Times,'Source Han Serif SC','Noto Serif CJK SC','Songti SC','STSong','SimSun',serif;
 --mf-sans:'Inter','PingFang SC','Microsoft YaHei',system-ui,sans-serif;
 --mf-mono:'JetBrains Mono','Cascadia Code',Consolas,monospace;
 --mf-kai:'LXGW WenKai','Kaiti SC','STKaiti','KaiTi','Source Han Serif SC','Noto Serif CJK SC','Songti SC',serif;
+--mf-thm-head-font:var(--mf-sans);--mf-proof-mark-font:var(--mf-kai);--mf-sol-mark-font:var(--mf-serif);
+--mf-academic-weight:500;
 --mf-rule:#1f2733;--mf-accent:#2a55d4;}
 *{box-sizing:border-box}
 html,body{margin:0;padding:0;background:#f3f5f8;color:#1f2733}
 a{color:var(--mf-accent)}
 .mf-page{max-width:880px;margin:0 auto;background:#fff;padding:56px 64px 96px;box-shadow:0 12px 40px -20px rgba(20,26,35,.35)}
-.mf-academic{font-family:var(--mf-serif);font-size:16.5px;line-height:1.9}
+.mf-academic{font-family:var(--mf-serif);font-size:16.5px;line-height:1.9;font-weight:var(--mf-academic-weight,500)}
 .mf-heading{font-family:var(--mf-sans);color:#141a23;font-weight:700;line-height:1.45;margin:1.5em 0 .6em}
 h1.mf-heading{font-size:1.85em;margin-top:0;padding-bottom:.1em}
 h2.mf-heading{font-size:1.35em;padding-left:10px;border-left:3px solid var(--mf-accent)}
@@ -58,9 +60,9 @@ h3.mf-heading{font-size:1.12em}
 /* ---------- 定理 / 定义 / 证明 ---------- */
 .mf-thm{margin:1.15em 0;padding:10px 16px;border-left:3px solid #c6ccd8;background:#fafbfc;border-radius:0 8px 8px 0;
 break-inside:avoid;display:flow-root;--mf-thm-tint:#eef4ff;--mf-thm-line:#c6ccd8}
-.mf-thm-head{font-family:var(--mf-sans);font-size:1em;font-weight:400;letter-spacing:.01em;margin-bottom:.28em;color:#000}
-.mf-thm-label{font-family:var(--mf-sans);font-weight:800;color:inherit}
-.mf-thm-title{font-family:var(--mf-sans);font-weight:800;color:#000}
+.mf-thm-head{font-family:var(--mf-thm-head-font,var(--mf-sans));font-size:1em;font-weight:800;letter-spacing:.01em;margin-bottom:.28em;color:#000}
+.mf-thm-label{font-family:inherit;font-weight:800;color:inherit}
+.mf-thm-title{font-family:inherit;font-weight:800;color:#000}
 .mf-thm-body{font-family:var(--mf-thm-body-font,var(--mf-kai));font-size:1em;line-height:1.85}
 .mf-thm-body>.mf-p:first-child{margin-top:.1em}
 .mf-thm-body>.mf-p:last-child{margin-bottom:.1em}
@@ -69,10 +71,10 @@ break-inside:avoid;display:flow-root;--mf-thm-tint:#eef4ff;--mf-thm-line:#c6ccd8
 .mf-thm-lemma,.mf-thm-proposition,.mf-thm-corollary{--mf-thm-tint:#ece4ff;--mf-thm-line:#8b5cf6;border-left-color:#8b5cf6;background:#faf8ff}
 .mf-thm-example{--mf-thm-tint:#d5f7e8;--mf-thm-line:#10b981;border-left-color:#10b981;background:#f5fdf9}
 .mf-thm-remark{--mf-thm-tint:#eceff4;--mf-thm-line:#94a3b8;border-left-color:#94a3b8;background:#fbfbfc}
-.mf-thm-inline-label{font-family:var(--mf-sans);font-weight:800;margin-right:.4em;color:#000}
+.mf-thm-inline-label{font-family:var(--mf-thm-head-font,var(--mf-sans));font-weight:800;margin-right:.4em;color:#000}
 .mf-proof{border-left-color:#94a3b8;background:#fbfbfc}
 .mf-proof .mf-thm-body{font-family:var(--mf-serif)}
-.mf-proof-q{float:left;margin-right:.3em;font-family:var(--mf-sans);font-weight:500;color:#000;line-height:1.85;text-indent:0}
+.mf-proof-q{float:left;margin-right:.3em;font-family:var(--mf-proof-mark-font,var(--mf-kai));font-weight:700;color:#000;line-height:1.85;text-indent:0}
 .mf-proof .mf-thm-body>.mf-p:first-child{text-indent:0}
 .mf-proof-title{font-family:var(--mf-sans);font-size:.92em;color:#64748b}
 .mf-qed{display:inline-block;margin-left:.45em;color:#000;font-size:.95em;line-height:1;white-space:nowrap}
