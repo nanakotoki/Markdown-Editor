@@ -68,6 +68,14 @@ const MIME = {
   '.map': 'application/json; charset=utf-8',
   '.txt': 'text/plain; charset=utf-8',
   '.pdf': 'application/pdf',
+  '.mp4': 'video/mp4',
+  '.webm': 'video/webm',
+  '.ogg': 'audio/ogg',
+  '.mp3': 'audio/mpeg',
+  '.wav': 'audio/wav',
+  '.avif': 'image/avif',
+  '.bmp': 'image/bmp',
+  '.csv': 'text/csv; charset=utf-8',
 }
 
 /* ------------------------------------------------------------------ */
@@ -224,6 +232,78 @@ async function serveStatic(req, res, distDir, embedded = null) {
       )
     }
   }
+}
+
+/* ------------------------------------------------------------------ */
+/* 工作区静态资源（/ws/…）                                             */
+/* ------------------------------------------------------------------ */
+
+/**
+ * 让文档里的相对路径能直接取到工作区里的文件：
+ *   `![](figs/a.png)`、`<img src="figs/a.png">`、`<video src="demo.mp4">`
+ * 渲染时会被改写成 `/ws/figs/a.png`，由这里读出磁盘上的字节。
+ *
+ * 只读、只限工作区内（safeJoin 挡 `..` 与越界），不做任何写入。
+ * 视频支持 Range 请求，拖动进度条才正常。
+ */
+async function serveWorkspaceAsset(req, res, root) {
+  const url = new URL(req.url, 'http://localhost')
+  const rel = decodeURIComponent(url.pathname).replace(/^\/ws\/?/, '')
+  if (!rel) {
+    res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }).end('Not Found')
+    return
+  }
+
+  const abs = safeJoin(root, rel)
+  let stat
+  try {
+    stat = await fs.stat(abs)
+  } catch {
+    res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }).end('Not Found')
+    return
+  }
+  if (!stat.isFile()) {
+    res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }).end('Not Found')
+    return
+  }
+
+  const type = MIME[path.extname(abs).toLowerCase()] ?? 'application/octet-stream'
+  const base = {
+    'Content-Type': type,
+    'Cache-Control': 'no-cache',
+    'Accept-Ranges': 'bytes',
+    'X-Content-Type-Options': 'nosniff',
+  }
+
+  // 视频 / 音频拖动进度条时会带 Range，切一段返回 206
+  const range = /^bytes=(\d*)-(\d*)$/.exec(String(req.headers.range ?? ''))
+  if (range && stat.size > 0) {
+    let start = range[1] === '' ? null : Number(range[1])
+    let end = range[2] === '' ? null : Number(range[2])
+    if (start === null && end !== null) {
+      start = Math.max(0, stat.size - end)
+      end = stat.size - 1
+    }
+    start = start ?? 0
+    end = Math.min(end ?? stat.size - 1, stat.size - 1)
+    if (start > end) {
+      res.writeHead(416, { 'Content-Range': `bytes */${stat.size}` }).end()
+      return
+    }
+    const data = await fs.readFile(abs)
+    const chunk = data.subarray(start, end + 1)
+    res.writeHead(206, {
+      ...base,
+      'Content-Length': chunk.length,
+      'Content-Range': `bytes ${start}-${end}/${stat.size}`,
+    })
+    res.end(req.method === 'HEAD' ? undefined : chunk)
+    return
+  }
+
+  const data = await fs.readFile(abs)
+  res.writeHead(200, { ...base, 'Content-Length': data.length })
+  res.end(req.method === 'HEAD' ? undefined : data)
 }
 
 /* ------------------------------------------------------------------ */
@@ -444,6 +524,10 @@ export function createApp({
     try {
       if (req.url.startsWith('/api/')) {
         await handleApi(req, res, absRoot, opts)
+        return
+      }
+      if (req.url.startsWith('/ws/')) {
+        await serveWorkspaceAsset(req, res, absRoot)
         return
       }
       if (req.method !== 'GET' && req.method !== 'HEAD') {

@@ -91,6 +91,134 @@ export interface RenderOptions {
   headingNumbering?: boolean
   /** 图表编号：按节（图 1.1）或全文连续（图 1） */
   figNumbering?: 'section' | 'global'
+  /**
+   * 工作区静态资源前缀，例如 `/ws/论文/figs`。
+   * 只给应用内预览用：相对路径的图片 / 视频会被拼到它后面，
+   * 这样 `<img src="figs/a.png">` 与 `![](figs/a.png)` 都能显示。
+   * 导出的 HTML 不设这个值，保持相对路径，拷走整个目录就能离线打开。
+   */
+  assetBase?: string
+}
+
+/** 绝对地址（http:、data:、/x、#x）原样保留，只有相对路径才拼资源前缀 */
+const ABS_SRC_RE = /^(?:[A-Za-z][A-Za-z0-9+.-]*:|\/\/|\/|#|\?)/
+
+/**
+ * 把相对路径拼到资源前缀后面，顺手消掉 `.` 与 `..`。
+ * 逐段 encodeURI：中文文件名、空格都能被浏览器正确取回，已编码的 `%20` 不会被二次编码。
+ */
+export function joinAssetPath(base: string, rel: string): string {
+  const m = /^([^?#]*)([?#].*)?$/.exec(rel)
+  const pathPart = m?.[1] ?? ''
+  const tail = m?.[2] ?? ''
+  const segs = base.split('/').filter(Boolean)
+  for (const part of pathPart.split('/')) {
+    if (!part || part === '.') continue
+    if (part === '..') {
+      segs.pop()
+      continue
+    }
+    segs.push(part)
+  }
+  return '/' + segs.map((s) => encodeURI(s)).join('/') + tail
+}
+
+/** `<div markdown="1">…</div>`：中间没有空行时，remark 会把整块当原始 HTML，
+ *  里面的 **强调**、$公式$、列表都不会解析。
+ *  这里在语法树上把容器里的源码重新解析一遍再拼回去——
+ *  比在文本上插空行更稳：行号不会变，点渲染结果跳源码依旧准确。 */
+const MD_ATTR_OPEN_RE =
+  /^<([A-Za-z][\w-]*)((?:[^>"']|"[^"]*"|'[^']*')*?)\smarkdown\s*=\s*["'](?:1|block|span|true)["']((?:[^>"']|"[^"]*"|'[^']*')*)>/
+
+function shiftPositions(node: any, lineDelta: number, offsetDelta: number) {
+  const p = node?.position
+  if (p) {
+    if (p.start) {
+      p.start.line += lineDelta
+      if (typeof p.start.offset === 'number') p.start.offset += offsetDelta
+    }
+    if (p.end) {
+      p.end.line += lineDelta
+      if (typeof p.end.offset === 'number') p.end.offset += offsetDelta
+    }
+  }
+  for (const child of node?.children ?? []) shiftPositions(child, lineDelta, offsetDelta)
+}
+
+function promoteMarkdownContainers(tree: any, src: string, makeProcessor: () => any) {
+  /** 把一段源码按 Markdown 解析，行号与偏移对齐回原文 */
+  const parseSlice = (text: string, lineDelta: number, offsetDelta: number) => {
+    const sub = makeProcessor().parse(text)
+    shiftPositions(sub, lineDelta, offsetDelta)
+    walk(sub)
+    return sub
+  }
+
+  const walk = (parent: any) => {
+    const kids: any[] = parent?.children
+    if (!Array.isArray(kids)) return
+    for (let i = 0; i < kids.length; i++) {
+      const node = kids[i]
+      if (node?.type === 'html' && typeof node.value === 'string') {
+        const m = MD_ATTR_OPEN_RE.exec(node.value)
+        if (m) {
+          const tag = m[1]
+          const open = `<${tag}${m[2]}${m[3]}>`
+          const baseOffset = node.position?.start?.offset
+          const baseLine = node.position?.start?.line
+          if (typeof baseOffset === 'number' && typeof baseLine === 'number') {
+            const rest = node.value.slice(m[0].length)
+            // 取「最后一个」闭标签：容器里嵌套同名标签时也能正确收口
+            const closeIdx = rest.toLowerCase().lastIndexOf(`</${tag.toLowerCase()}`)
+            const inline =
+              closeIdx >= 0 ? new RegExp(`^</${tag}\\s*>`, 'i').exec(rest.slice(closeIdx)) : null
+
+            if (inline) {
+              // 开闭标签在同一个 HTML 节点里：<div markdown="1">内容</div>
+              const inner = rest.slice(0, closeIdx)
+              const tail = rest
+                .slice(closeIdx)
+                .replace(/\smarkdown\s*=\s*["'][^"']*["']/, '')
+              const sub = parseSlice(inner, baseLine - 1, baseOffset + m[0].length)
+              kids.splice(i, 1, { type: 'html', value: open }, ...(sub.children ?? []), {
+                type: 'html',
+                value: tail,
+              })
+              i += (sub.children ?? []).length + 1
+              continue
+            }
+
+            // 开标签与闭标签是两个节点：找同级里那个 </tag>
+            const closeOnlyRe = new RegExp(`^</${tag}\\s*>`, 'i')
+            let j = i + 1
+            while (j < kids.length) {
+              const k = kids[j]
+              if (k?.type === 'html' && closeOnlyRe.test(k.value ?? '')) break
+              j++
+            }
+            if (j < kids.length) {
+              const startOffset = node.position?.end?.offset
+              const endOffset = kids[j].position?.start?.offset
+              if (typeof startOffset === 'number' && typeof endOffset === 'number') {
+                const inner = src.slice(startOffset, endOffset)
+                const sub = parseSlice(inner, (node.position?.end?.line ?? 1) - 1, startOffset)
+                kids[i] = { ...node, value: open }
+                kids[j] = {
+                  ...kids[j],
+                  value: String(kids[j].value ?? '').replace(/\smarkdown\s*=\s*["'][^"']*["']/, ''),
+                }
+                kids.splice(i + 1, j - i - 1, ...(sub.children ?? []))
+                i += (sub.children ?? []).length
+                continue
+              }
+            }
+          }
+        }
+      }
+      walk(node)
+    }
+  }
+  walk(tree)
 }
 
 const THM_TYPES: Record<string, { cn: string; en: string; kind: RefKind; env: string }> = {
@@ -129,8 +257,11 @@ export function normalizeDirectives(md: string): string {
 }
 
 export function parseMarkdown(md: string): any {
-  const processor = unified().use(remarkParse).use(remarkMath).use(remarkGfm).use(remarkDirective)
-  const tree = processor.parse(normalizeDirectives(latexCommandsToMarkdown(md)))
+  const makeProcessor = () =>
+    unified().use(remarkParse).use(remarkMath).use(remarkGfm).use(remarkDirective)
+  const source = normalizeDirectives(latexCommandsToMarkdown(md))
+  const tree = makeProcessor().parse(source)
+  promoteMarkdownContainers(tree, source, makeProcessor)
   promoteSingleMathParagraphs(tree)
   mergeTextDirectives(tree)
   return tree
@@ -254,6 +385,27 @@ interface Ctx extends Required<Pick<RenderOptions, 'macros'>> {
   /** 已编号的脚注：identifier -> 序号（按首次引用顺序） */
   fnNumbers: Map<string, number>
   fnOrder: string[]
+  /** 相对资源路径的前缀（预览才有，导出为空） */
+  assetBase?: string
+}
+
+/** 渲染阶段改写相对路径（预览专用）：导出留相对路径，方便整个目录拷走 */
+function assetUrl(src: string, ctx: Ctx): string {
+  const s = (src ?? '').trim()
+  if (!ctx.assetBase || !s || ABS_SRC_RE.test(s)) return s
+  return joinAssetPath(ctx.assetBase, s)
+}
+
+/** 原始 HTML 里的 img / video / source 也要走同一条路径规则 */
+const RAW_MEDIA_SRC_RE =
+  /(<(?:img|source|video|audio|embed|track)\b[^>]*?\s(?:src|poster)\s*=\s*)(["'])([^"']+)\2/gi
+
+function rebaseRawHtml(value: string, ctx: Ctx): string {
+  if (!ctx.assetBase) return value
+  return value.replace(
+    RAW_MEDIA_SRC_RE,
+    (_m, head: string, q: string, url: string) => `${head}${q}${escapeHtml(assetUrl(url, ctx))}${q}`
+  )
 }
 
 /** 标题编号：「1」「1.1」「1.1.1」 */
@@ -301,6 +453,7 @@ export function renderMarkdown(md: string, opts: RenderOptions = {}): RenderResu
     fnDefs: new Map(),
     fnNumbers: new Map(),
     fnOrder: [],
+    assetBase: opts.assetBase,
   }
 
   // 第一遍：为公式/定理/算法/标题分配编号与 id（保证交叉引用可以前向引用）
@@ -321,11 +474,20 @@ export function renderMarkdown(md: string, opts: RenderOptions = {}): RenderResu
  * 预览据此实现「点哪儿跳到哪儿」与分屏滚动联动——
  * mdast 的 position 是行号，DOM 这边用它跟编辑器对齐。
  */
+/**
+ * 这些标签加 `data-mf-line` 没有意义（有的还会导致解析问题），直接跳过。
+ * 其余标签照常打标记——原始 HTML 因此也能「点哪儿跳到哪儿」。
+ */
+const NO_LINE_TAGS = new Set([
+  'style', 'script', 'link', 'meta', 'title', 'base', 'head', 'html', 'body', 'template',
+])
+
 function withLineAttr(html: string, line?: number): string {
   if (!line) return html
   const m = /^(\s*)<([a-zA-Z][\w-]*)((?:[^>"']|"[^"]*"|'[^']*')*?)(\/?)>/.exec(html)
   if (!m) return html
   const [whole, lead, tag, attrs, selfClose] = m
+  if (NO_LINE_TAGS.has(tag.toLowerCase())) return html
   if (/\sdata-mf-line=/.test(attrs)) return html
   return `${lead}<${tag}${attrs} data-mf-line="${line}"${selfClose}>${html.slice(whole.length)}`
 }
@@ -653,7 +815,7 @@ function renderBlock(node: any, ctx: Ctx): string {
 
     case 'html':
       if (PAGEBREAK_TEXT_RE.test(node.value ?? '')) return pageBreakHtml()
-      return node.value ?? ''
+      return rebaseRawHtml(node.value ?? '', ctx)
 
     case 'definition':
     case 'footnoteDefinition':
@@ -859,7 +1021,7 @@ function renderImageFigure(node: any, img: any, ctx: Ctx): string {
   const title = node.data?.mfCaptionTitle as string | undefined
   const kind = ctx.lang === 'en' ? 'Figure' : '图'
   return `<figure class="mf-figure"${id ? ` id="${anchorOf(id)}"` : ''}><img class="mf-img" src="${escapeHtml(
-    img.url ?? ''
+    assetUrl(img.url ?? '', ctx)
   )}" alt="${escapeHtml(img.alt ?? '')}" />${
     no ? `<figcaption class="mf-caption">${caption(`${kind} ${no}`, title)}</figcaption>` : ''
   }</figure>`
@@ -938,11 +1100,11 @@ function renderInlineNode(node: any, ctx: Ctx): string {
     case 'link':
       return `<a class="mf-link" href="${escapeHtml(node.url ?? '#')}" target="_blank" rel="noreferrer">${renderInline(node.children ?? [], ctx)}</a>`
     case 'image':
-      return `<img class="mf-img" src="${escapeHtml(node.url ?? '')}" alt="${escapeHtml(node.alt ?? '')}" />`
+      return `<img class="mf-img" src="${escapeHtml(assetUrl(node.url ?? '', ctx))}" alt="${escapeHtml(node.alt ?? '')}" />`
     case 'break':
       return '<br />'
     case 'html':
-      return node.value ?? ''
+      return rebaseRawHtml(node.value ?? '', ctx)
     case 'footnoteReference':
       return renderFootnoteRef(String(node.identifier ?? node.label ?? ''), ctx)
     default:

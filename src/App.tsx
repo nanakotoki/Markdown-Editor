@@ -364,6 +364,7 @@ export default function App() {
       jumpable={viewMode === 'split'}
       scrollElementRef={previewScrollRef}
       docTitle={doc.title}
+      docPath={doc.filePath}
     />
   )
 
@@ -379,6 +380,7 @@ export default function App() {
       mode="read"
       className="w-full flex-1"
       docTitle={doc.title}
+      docPath={doc.filePath}
     />
   )
 

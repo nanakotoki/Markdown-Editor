@@ -32,6 +32,9 @@ export interface AcademicPreviewProps {
   mode?: 'preview' | 'read'
   /** 文档标题，页眉里的 {title} 用它 */
   docTitle?: string
+  /** 当前文件在工作区里的相对路径，如 `论文/ch1.md`。
+   *  有了它，`![](figs/a.png)` 与 `<img src="figs/a.png">` 才能取到工作区里的图片 */
+  docPath?: string
 }
 
 interface HoverCard {
@@ -57,6 +60,7 @@ export default function AcademicPreview({
   scrollElementRef,
   mode = 'preview',
   docTitle = '',
+  docPath,
 }: AcademicPreviewProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const [hover, setHover] = useState<HoverCard | null>(null)
@@ -74,6 +78,13 @@ export default function AcademicPreview({
   const jumpableRef = useRef(jumpable)
   jumpableRef.current = jumpable
 
+  /** 相对资源前缀：`/ws/<当前文件所在目录>`，图片、视频据此取工作区里的文件 */
+  const assetBase = useMemo(() => {
+    if (!docPath) return undefined
+    const dir = docPath.split('/').slice(0, -1).join('/')
+    return dir ? `/ws/${dir}` : '/ws'
+  }, [docPath])
+
   const result = useMemo(
     () =>
       renderMarkdown(content, {
@@ -86,6 +97,7 @@ export default function AcademicPreview({
         qed: settings.qedSymbol,
         headingNumbering: settings.headingNumbering,
         figNumbering: settings.figNumbering,
+        assetBase,
       }),
     [
       content,
@@ -100,6 +112,7 @@ export default function AcademicPreview({
       settings.headingNumbering,
       settings.figNumbering,
       extRefs,
+      assetBase,
     ]
   )
 
@@ -259,6 +272,15 @@ export default function AcademicPreview({
   }, [])
 
   /**
+   * 阅读模式就是打印预览：折叠块在这里一律展开。
+   * 不开的话分页按折叠后的高度算，打印时展开就会把内容顶出纸面。
+   */
+  const sheetHtml = useMemo(
+    () => (mode === 'read' ? result.html.replace(/<details(?![^>]*\bopen\b)/gi, '<details open') : result.html),
+    [result.html, mode]
+  )
+
+  /**
    * 打印：把已经分好页的 A4 纸面复制到一个只供打印的容器里，
    * 原界面整体隐藏，这样打出来就是干净的论文版面，不会把工具栏、侧栏一起印上去。
    */
@@ -267,6 +289,8 @@ export default function AcademicPreview({
     holder.className = 'mf-print-holder'
     document.querySelectorAll('.mf-sheet').forEach((sheet) => holder.appendChild(sheet.cloneNode(true)))
     if (!holder.childElementCount) return
+    // 折叠块在纸上没法点，先展开再打，否则 PDF 里只剩一个标题
+    holder.querySelectorAll('details').forEach((d) => ((d as HTMLDetailsElement).open = true))
     document.body.appendChild(holder)
     document.body.classList.add('mf-printing')
     const cleanup = () => {
@@ -300,7 +324,7 @@ export default function AcademicPreview({
           )}
           <div className="pb-10 pt-4">
             <PaginatedSheets
-              html={result.html}
+              html={sheetHtml}
               signature={layoutKey}
               onPages={setPageTotal}
               settings={settings}

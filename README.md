@@ -33,7 +33,7 @@ MathFlow 把「写作」和「公式」放在同一个光标里：正文用 Mark
 ### 方式一：安装版（Windows，推荐；要发给别人就发这个）
 
 ```
-release\installer\MathFlow-Setup-1.0.9.exe      （约 109 MB）
+release\installer\MathFlow-Setup-1.0.10.exe      （约 109 MB）
 ```
 
 双击 → 一路「下一步」→ 桌面和开始菜单出现 MathFlow 图标，双击即用。
@@ -51,7 +51,7 @@ release\installer\MathFlow-Setup-1.0.9.exe      （约 109 MB）
 ### 方式二：便携版（Windows，免安装）
 
 ```
-release\portable\MathFlow-Portable-1.0.9.exe      （约 109 MB）
+release\portable\MathFlow-Portable-1.0.10.exe      （约 109 MB）
 ```
 
 单文件，双击即用，不写注册表、不进「应用」列表，适合放 U 盘或没有安装权限的电脑。
@@ -65,13 +65,13 @@ release\portable\MathFlow-Portable-1.0.9.exe      （约 109 MB）
 
 ```
 发给别人/
-├── MathFlow-Setup-1.0.9.exe     安装版
-├── MathFlow-Portable-1.0.9.exe     便携版
+├── MathFlow-Setup-1.0.10.exe     安装版
+├── MathFlow-Portable-1.0.10.exe     便携版
 ├── 使用说明.txt                  给非技术用户的一页说明（含 SmartScreen 处理办法）
 └── SHA256.txt                    校验值，对方可自行核对
 ```
 
-对方只需要做一件事：双击 `MathFlow-Setup-1.0.9.exe`，下一步、下一步、完成。
+对方只需要做一件事：双击 `MathFlow-Setup-1.0.10.exe`，下一步、下一步、完成。
 
 重新生成这套产物（会依次做前端构建 → 图标 → 打包 → 归档）：
 
@@ -436,8 +436,23 @@ return $A$
 ```
 ````
 
-### 7. 论文排版（写毕业论文够用）
+**原生 HTML 直接生效。** 预览、阅读模式、导出的 PDF 都由内嵌的 Chromium 渲染，
+写 `<details>`、`<kbd>`、`<mark>`、`<figure>`、内联 `<svg>`、`<iframe>` 都按浏览器的行为走，
+样式上也补齐了这些标签在论文里的样子：
 
+| 写法 | 行为 |
+| --- | --- |
+| `<div align="center">…</div>` | 居中；加 `markdown="1"` 后容器里照常解析 Markdown 与公式，不再需要空行 |
+| `<details><summary>…` | 折叠块（带缩进线）；阅读模式与打印时自动展开，屏幕上仍可点开收起 |
+| `<img src="figs/a.png">` | 相对路径按**当前文件所在目录**解析，直接读工作区里的图片；`![](figs/a.png)` 同理 |
+| `<table>` | 与 GFM 表格一样排成三线表，`<caption>` 居中当表题 |
+| `<kbd>` `<mark>` `<abbr>` `<ruby>` `<sub>` `<sup>` `<dl>` | 按键框、荧光笔、点线下划线、注音、上下标、术语表都按论文该有的样子显示 |
+| `<style>` | 整篇生效（与浏览器一致），可以给论文补自定义样式 |
+| `<script>` | 预览里不执行（`innerHTML` 不运行脚本），导出后的独立网页按浏览器正常执行 |
+
+没列到的标签不会被打回文本，浏览器默认样式照常起作用。
+
+### 7. 论文排版（写毕业论文够用）
 阅读模式里的每一张 A4 纸就是打印出来的一页——屏幕分页、页边距、页眉页脚与 PDF 逐页对齐，
 看到的换行就是打印出来的换行。
 

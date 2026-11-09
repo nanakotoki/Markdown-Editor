@@ -75,6 +75,20 @@ export async function buildStandaloneHtml(markdown: string, opts: HtmlExportOpti
 <div class="mf-print-bar">
   <button onclick="window.print()" class="primary">打印 / 导出 PDF</button>
 </div>
+<script>
+  /* <details> 在纸上点不开，打印前先展开，打完还原 */
+  (function () {
+    var opened = [];
+    addEventListener('beforeprint', function () {
+      opened = Array.prototype.slice.call(document.querySelectorAll('details:not([open])'));
+      opened.forEach(function (d) { d.open = true; });
+    });
+    addEventListener('afterprint', function () {
+      opened.forEach(function (d) { d.open = false; });
+      opened = [];
+    });
+  })();
+</script>
 </body>
 </html>`
   return { html, result }

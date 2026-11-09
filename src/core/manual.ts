@@ -408,6 +408,54 @@ export const MANUAL_SECTIONS: ManualSection[] = [
     ],
   },
   {
+    id: 'html',
+    title: '直接写 HTML',
+    summary: '内嵌 Chromium，标签基本照浏览器渲染；这里只补论文里该有的样式。',
+    entries: [
+      {
+        title: '常用的几个标签',
+        syntax: j('按 <kbd>Ctrl</kbd> + <kbd>S</kbd> 保存，<mark>重点</mark>，', 'H<sub>2</sub>O，x<sup>2</sup>，<abbr title="HyperText Markup Language">HTML</abbr>。'),
+        note: '预览、阅读模式、导出的 PDF 都是同一套渲染，写什么就是什么。按键框、荧光笔、点线下划线、注音 `<ruby>汉<rt>hàn</rt></ruby>`、上下标都按论文的样子显示，不会被当成正文文字。',
+      },
+      {
+        title: '让容器里也能写 Markdown',
+        syntax: '<div align="center" markdown="1">',
+        note: 'HTML 块里的内容默认按原始文本处理。加了 `markdown="1"`，容器里的 **加粗**、$公式$、列表照常解析，不必再靠空行隔开；行号也不会错位，点预览照样能跳回源码。',
+        block: true,
+      },
+      {
+        title: '折叠块',
+        syntax: j('<details>', '<summary>点开看推导</summary>', '', '因为这里空了一行，这一段是 Markdown。', '', '</details>'),
+        note: '屏幕上点一下展开；阅读模式与打印时会自动展开，所以分页按展开后的高度算，PDF 里不会只剩一行标题、也不会把内容顶出纸面。',
+        block: true,
+      },
+      {
+        title: '图片用相对路径',
+        syntax: '![](figs/plot.png)',
+        note: '相对路径按**当前文件所在目录**解析，直接读工作区磁盘上的文件；`<img src="figs/plot.png">` 也一样。放进 `figs/` 子目录、在正文里写 `figs/plot.png` 即可，不用转成 base64。',
+      },
+      {
+        title: '原生表格 / 图注',
+        syntax: j('<table>', '<caption>表：误差对比</caption>', '<tr><th>方法</th><th>误差</th></tr>', '<tr><td>龙格–库塔</td><td>4.7e-7</td></tr>', '</table>'),
+        note: '原生 `<table>` 与 GFM 表格一样自动排成三线表，`<caption>` 居中当表题；`<figure>` + `<figcaption>` 写法同样可用。',
+        block: true,
+      },
+      {
+        title: '内联 SVG 与嵌入',
+        note: '`<svg>` 直接画矢量图（会被约束在版心宽度内），`<iframe>` 按 16:9 铺满并居中，`<video>` / `<audio>` 也能用。',
+      },
+      {
+        title: '自定义样式与脚本',
+        note: '`<style>` 整篇生效，与浏览器一致，可以给论文补自己的排版规则。`<script>` 在预览里不执行（`innerHTML` 本身不运行脚本），导出成独立网页后按浏览器正常执行。',
+      },
+      {
+        title: '内联混合模式下会看到源码',
+        note: '「内联混合」是在源码上直接排版，原始 HTML 块在那里按源码显示；切到「左右分屏」的右栏、「阅读」或导出，就都是渲染后的样子。',
+        tag: '限制',
+      },
+    ],
+  },
+  {
     id: 'shortcut',
     title: '快捷键',
     summary: '记住这几个就够用了。',

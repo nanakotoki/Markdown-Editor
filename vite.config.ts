@@ -18,6 +18,8 @@ export default defineConfig({
     port: 5183,
     proxy: {
       '/api': { target: API_TARGET, changeOrigin: true },
+      // 文档里相对路径的图片 / 视频：/ws/<工作区路径>
+      '/ws': { target: API_TARGET, changeOrigin: true },
     },
   },
   preview: { port: 4173 },

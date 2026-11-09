@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { paginateElements, readMetrics, type PageUnit } from '../../core/pagination'
+import { flowOf, paginateElements, readMetrics, type PageUnit } from '../../core/pagination'
 import type { Settings } from '../../store/useEditorStore'
 
 export { SHEET } from '../../core/pagination'
@@ -61,7 +61,8 @@ function pageHtml(units: PageUnit[]): string {
 /** 克隆可拆容器，只保留 [from, to] 这几段正文 */
 function fragmentHtml(el: HTMLElement, from: number, to: number): string {
   const clone = el.cloneNode(true) as HTMLElement
-  const flow = clone.querySelector('[data-mf-flow]') as HTMLElement | null
+  // 证明/解答取内部的 [data-mf-flow]；手写的 <div> 之类的容器直接按自己的子块拆
+  const flow = flowOf(clone)
   if (!flow) return clone.outerHTML
   const kids = Array.from(flow.children) as HTMLElement[]
   const last = kids.length - 1
@@ -71,9 +72,12 @@ function fragmentHtml(el: HTMLElement, from: number, to: number): string {
   // 「证」「解」这类开头标记只跟首段，证毕符号只跟末段
   if (from > 0) clone.querySelectorAll('[data-mf-only-first]').forEach((n) => n.remove())
   if (to < last) clone.querySelectorAll('[data-mf-only-last]').forEach((n) => n.remove())
-  clone.classList.add('mf-frag')
-  if (from === 0) clone.classList.add('mf-frag-start')
-  if (to >= last) clone.classList.add('mf-frag-end')
+  // 接缝处的圆角与边线只在证明/解答这类带框容器上处理，别动读者自己的 div
+  if (clone.hasAttribute('data-mf-splittable')) {
+    clone.classList.add('mf-frag')
+    if (from === 0) clone.classList.add('mf-frag-start')
+    if (to >= last) clone.classList.add('mf-frag-end')
+  }
   return clone.outerHTML
 }
 

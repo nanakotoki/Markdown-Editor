@@ -75,8 +75,27 @@ export interface PageUnit {
 /** 块内流容器的选择器（证明/解答的正文容器） */
 const FLOW_SELECTOR = '[data-mf-flow]'
 
+/** 文档里手写的容器（`<div>`、`<section>` 等）：内容太长时也允许在子块之间断开，
+ *  否则整块会被推到下一页，上一页留一大片空白 */
+const RAW_FLOW_TAGS = new Set(['DIV', 'SECTION', 'ARTICLE', 'ASIDE', 'MAIN'])
+const RAW_BLOCK_KIDS =
+  ':scope > p, :scope > ul, :scope > ol, :scope > dl, :scope > table, :scope > pre, ' +
+  ':scope > blockquote, :scope > h1, :scope > h2, :scope > h3, :scope > h4, :scope > figure, :scope > div'
+
+/** 找到可以按子块拆分的容器；没有就返回 null。
+ *  也用于分页后按段重组（PaginatedSheets），所以传入克隆节点同样有效。 */
+export function flowOf(el: HTMLElement): HTMLElement | null {
+  const marked = el.querySelector(FLOW_SELECTOR) as HTMLElement | null
+  if (marked) return marked
+  if (!RAW_FLOW_TAGS.has(el.tagName)) return null
+  // 只认读者自己写的容器：程序生成的 mf-* 块有自己的断页规则
+  if (Array.from(el.classList).some((c) => c.startsWith('mf-'))) return null
+  return el.querySelectorAll(RAW_BLOCK_KIDS).length >= 2 ? el : null
+}
+
 function isSplittable(el: HTMLElement): boolean {
-  return el.hasAttribute('data-mf-splittable') && !!el.querySelector(FLOW_SELECTOR)
+  if (el.hasAttribute('data-mf-splittable') && el.querySelector(FLOW_SELECTOR)) return true
+  return !!flowOf(el)
 }
 
 /**
@@ -117,7 +136,7 @@ export function paginateElements(kids: HTMLElement[], safeH = readMetrics().safe
     }
 
     if (isSplittable(el) && heightOf(el) > safeH * 0.72) {
-      const flow = el.querySelector(FLOW_SELECTOR) as HTMLElement
+      const flow = flowOf(el) as HTMLElement
       const parts = Array.from(flow.children) as HTMLElement[]
       if (parts.length > 1) {
         for (let c = 0; c < parts.length; c++) {
