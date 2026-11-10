@@ -18,6 +18,7 @@ import { macrosToKatex, macrosToPreamble } from '../../core/katexSafeRender'
 import { buildStandaloneHtml, openHtmlInNewWindow } from '../../core/htmlExport'
 import { copyPlainText, downloadFile } from '../../core/clipboardExport'
 import { readFile, runExport, type ExportResult } from '../../core/workspaceApi'
+import { desktop } from '../../core/desktop'
 import { useEditorStore } from '../../store/useEditorStore'
 
 const TEMPLATES: Array<{ key: TexTemplate; name: string; desc: string; badge: string }> = [
@@ -47,6 +48,13 @@ export default function ExportModal({ open, onClose }: { open: boolean; onClose:
   const doc = activeDoc()
   const title = doc?.title ?? 'MathFlow 文档'
   const macroMap = useMemo(() => macrosToKatex(macros), [macros])
+  /** 文档所在目录：图片相对路径以此为基准，PDF 的保存框也默认落在这里 */
+  const docDir = useMemo(() => (doc?.filePath ? doc.filePath.split('/').slice(0, -1).join('/') : ''), [doc?.filePath])
+  const assetBase = useMemo(() => {
+    if (!doc?.filePath || typeof location === 'undefined') return undefined
+    return `${location.origin}/ws${docDir ? `/${docDir}` : ''}`
+  }, [doc?.filePath, docDir])
+  const [pdfBusy, setPdfBusy] = useState(false)
 
   useEffect(() => {
     if (open) setTemplate(settings.texTemplate)
@@ -71,7 +79,7 @@ export default function ExportModal({ open, onClose }: { open: boolean; onClose:
     if (!open || tab !== 'html') return
     let cancelled = false
     setBuilding(true)
-    buildStandaloneHtml(liveContent, { title, macros: macroMap, bib: bibEntries, settings })
+    buildStandaloneHtml(liveContent, { title, macros: macroMap, bib: bibEntries, settings, assetBase })
       .then((r) => {
         if (!cancelled) setHtml(r.html)
       })
@@ -79,7 +87,7 @@ export default function ExportModal({ open, onClose }: { open: boolean; onClose:
     return () => {
       cancelled = true
     }
-  }, [open, tab, liveContent, title, bibEntries, settings])
+  }, [open, tab, liveContent, title, bibEntries, settings, assetBase])
 
   const texLines = useMemo(() => compiled.tex.split('\n'), [compiled.tex])
 
@@ -104,6 +112,31 @@ export default function ExportModal({ open, onClose }: { open: boolean; onClose:
       showToast(e?.message ?? '导出失败', 'warn')
     } finally {
       setBookBusy(false)
+    }
+  }
+
+  /**
+   * 导出 PDF：桌面版直接走 Chromium 的 printToPDF——保存框里文件名已经填好，
+   * 回车即出文件，不经过「系统打印 → 另存为 PDF → 再敲一遍文件名」那一圈。
+   * 浏览器版没有这条通道，只能退回新窗口 + Ctrl+P。
+   */
+  const exportPdf = async () => {
+    setPdfBusy(true)
+    try {
+      const r = await buildStandaloneHtml(liveContent, { title, macros: macroMap, bib: bibEntries, settings, assetBase })
+      const bridge = desktop()
+      if (bridge) {
+        const res = await bridge.exportPdf({ html: r.html, defaultName: `${title}.pdf`, dirHint: docDir })
+        if (res.canceled) return
+        showToast(res.ok ? `已导出 PDF：${res.filePath}` : (res.error ?? '导出失败'), res.ok ? 'success' : 'warn')
+        return
+      }
+      const ok = openHtmlInNewWindow(r.html)
+      showToast(ok ? '已在新窗口打开，Ctrl+P 存为 PDF' : '浏览器拦截了新窗口', ok ? 'success' : 'warn')
+    } catch (e: any) {
+      showToast(e?.message ?? '导出失败', 'warn')
+    } finally {
+      setPdfBusy(false)
     }
   }
 
@@ -249,27 +282,34 @@ export default function ExportModal({ open, onClose }: { open: boolean; onClose:
 
       {tab === 'html' && (
         <div className="space-y-3">
-          <div className="flex items-center gap-2">
-            <Button
-              variant="primary"
-              onClick={async () => {
-                const r = await buildStandaloneHtml(liveContent, { title, macros: macroMap, bib: bibEntries, settings })
-                downloadFile(`${title.replace(/[\\/:*?"<>|]/g, '-')}.html`, r.html, 'text/html;charset=utf-8')
-                showToast('已下载单文件网页（内嵌字体，可离线打开）', 'success')
-              }}
-            >
-              <Download size={13} /> 下载单文件 HTML
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="primary" disabled={pdfBusy} onClick={exportPdf}>
+              {pdfBusy ? <Loader2 size={13} className="animate-spin" /> : <FileText size={13} />}
+              {pdfBusy ? '正在生成 PDF…' : '导出 PDF'}
             </Button>
             <Button
               variant="outline"
               onClick={async () => {
+                // 下载给别人时保留相对路径，不把本机 localhost 地址写进文件
                 const r = await buildStandaloneHtml(liveContent, { title, macros: macroMap, bib: bibEntries, settings })
-                const ok = openHtmlInNewWindow(r.html)
-                showToast(ok ? '已在新窗口打开，可直接 Ctrl+P 打印为 A4 PDF' : '浏览器拦截了新窗口', ok ? 'success' : 'warn')
+                downloadFile(`${title.replace(/[\\/:*?"<>|]/g, '-')}.html`, r.html, 'text/html;charset=utf-8')
+                showToast('已下载单文件网页（图片按相对路径引用）', 'success')
               }}
             >
-              <Printer size={13} /> 打印 / 导出 A4 PDF
+              <Download size={13} /> 下载单文件 HTML
             </Button>
+            {!desktop() && (
+              <Button
+                variant="outline"
+                onClick={async () => {
+                  const r = await buildStandaloneHtml(liveContent, { title, macros: macroMap, bib: bibEntries, settings, assetBase })
+                  const ok = openHtmlInNewWindow(r.html)
+                  showToast(ok ? '已在新窗口打开，可直接 Ctrl+P 打印为 A4 PDF' : '浏览器拦截了新窗口', ok ? 'success' : 'warn')
+                }}
+              >
+                <Printer size={13} /> 打印 / 导出 A4 PDF
+              </Button>
+            )}
             {building && (
               <span className="flex items-center gap-1 text-[11px] text-ink-400">
                 <Loader2 size={11} className="animate-spin" /> 正在内联字体…
@@ -282,7 +322,12 @@ export default function ExportModal({ open, onClose }: { open: boolean; onClose:
               预览（与导出结果一致，已内嵌 Latin Modern / 思源宋体回退）
             </div>
             {html ? (
-              <iframe title="html-preview" srcDoc={html} className="h-[400px] w-full bg-white" />
+              // 预览里不需要导出网页自带的那颗「打印」浮标，按钮已经在上面了
+              <iframe
+                title="html-preview"
+                srcDoc={html.replace('</head>', '<style>.mf-print-bar{display:none!important}</style></head>')}
+                className="h-[400px] w-full bg-white"
+              />
             ) : (
               <div className="flex h-[400px] items-center justify-center text-[12px] text-ink-400">
                 {building ? '正在生成…' : '点击上方按钮生成预览'}

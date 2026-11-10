@@ -193,6 +193,15 @@ export async function createFile(path: string, content = ''): Promise<{ path: st
   return request<{ path: string }>('/file', { method: 'POST', body: JSON.stringify({ path, content }) })
 }
 
+/** 写二进制资源（粘贴进来的截图）。base64 由调用方准备，落盘大小上限 40MB。 */
+export async function writeAsset(path: string, base64: string): Promise<{ path: string; size: number }> {
+  return request<{ path: string; size: number }>('/asset', {
+    method: 'POST',
+    body: JSON.stringify({ path, base64 }),
+    timeout: 30_000,
+  })
+}
+
 export async function createFolder(path: string): Promise<{ path: string }> {
   return request<{ path: string }>('/dir', { method: 'POST', body: JSON.stringify({ path }) })
 }

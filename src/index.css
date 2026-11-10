@@ -702,34 +702,6 @@ body {
   content: '：';
 }
 
-/* --- 英文文档：标签与 Proof 用粗黑体，定理正文斜体，证明正文正体 --- */
-.mf-thm-en .mf-thm-body {
-  font-family: var(--mf-serif);
-  font-style: italic;
-}
-/* 公式本身不跟着斜一次（KaTeX 内部自己管字形） */
-.mf-thm-en .mf-thm-body .katex,
-.mf-thm-en .mf-thm-body .katex-display,
-.mf-thm-en .mf-thm-body .mf-eq {
-  font-style: normal;
-}
-.mf-thm-en.mf-proof .mf-thm-body,
-.mf-thm-en.mf-thm-remark .mf-thm-body {
-  font-style: normal;
-}
-.mf-thm-en .mf-proof-q {
-  font-family: var(--mf-serif);
-  font-style: normal;
-  font-weight: 800;
-  color: #000;
-}
-.mf-thm-en .mf-thm-inline-label {
-  color: #000;
-}
-.mf-thm-en .mf-qed {
-  font-style: normal;
-}
-
 /* --- beamer：圆角卡片 + 色块标题 --- */
 :root[data-thm-style='beamer'] .mf-thm {
   padding: 0;

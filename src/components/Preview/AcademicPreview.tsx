@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { renderMarkdown, buildPreviewMap, type RefEntry, type RenderResult } from '../../core/renderMarkdown'
 import type { MacroMap } from '../../core/katexSafeRender'
 import { useEditorStore, type BibEntry, type Settings } from '../../store/useEditorStore'
+import { desktop } from '../../core/desktop'
 import PaginatedSheets from './PaginatedSheets'
 
 /**
@@ -283,6 +284,9 @@ export default function AcademicPreview({
   /**
    * 打印：把已经分好页的 A4 纸面复制到一个只供打印的容器里，
    * 原界面整体隐藏，这样打出来就是干净的论文版面，不会把工具栏、侧栏一起印上去。
+   *
+   * 桌面版把这份纸面直接交给 printToPDF：保存框里文件名已填好，不经过系统打印对话框；
+   * 浏览器版仍然走 window.print()，那是网页里唯一的出口。
    */
   const printAsPdf = () => {
     const holder = document.createElement('div')
@@ -297,6 +301,31 @@ export default function AcademicPreview({
       document.body.classList.remove('mf-printing')
       holder.remove()
     }
+
+    const bridge = desktop()
+    if (bridge) {
+      const dirHint = docPath ? docPath.split('/').slice(0, -1).join('/') : ''
+      // 等两帧：样式先落到纸面上，再让 Chromium 去渲染 PDF
+      requestAnimationFrame(() =>
+        requestAnimationFrame(async () => {
+          try {
+            const res = await bridge.printCurrent({
+              defaultName: `${docTitle || 'MathFlow 文档'}.pdf`,
+              dirHint,
+            })
+            const toast = useEditorStore.getState().showToast
+            if (res.canceled) return
+            toast(res.ok ? `已导出 PDF：${res.filePath}` : (res.error ?? '导出失败'), res.ok ? 'success' : 'warn')
+          } catch (e: any) {
+            useEditorStore.getState().showToast(e?.message ?? '导出失败', 'warn')
+          } finally {
+            cleanup()
+          }
+        })
+      )
+      return
+    }
+
     window.addEventListener('afterprint', cleanup, { once: true })
     window.print()
     setTimeout(cleanup, 120)
@@ -317,8 +346,8 @@ export default function AcademicPreview({
               <span>
                 虚线处为手动分页（源码里写 <code className="rounded bg-white/70 px-1 py-0.5 font-mono text-[11px]">{'\\newpage'}</code>）
               </span>
-              <button className="mf-read-print" onClick={printAsPdf} title="按当前分页打印，或另存为 PDF">
-                打印 / 存为 PDF
+              <button className="mf-read-print" onClick={printAsPdf} title="按当前分页导出 PDF（桌面版直接出文件）">
+                {desktop() ? '导出 PDF' : '打印 / 存为 PDF'}
               </button>
             </div>
           )}

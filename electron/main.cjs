@@ -9,7 +9,7 @@
  *    · 浏览器方式继续保留，喜欢网页的人照旧打开页面。
  * ============================================================================
  */
-const { app, BrowserWindow, dialog, shell, Menu, nativeTheme } = require('electron')
+const { app, BrowserWindow, dialog, shell, Menu, nativeTheme, ipcMain } = require('electron')
 const path = require('node:path')
 const fs = require('node:fs')
 const fsp = require('node:fs/promises')
@@ -143,6 +143,113 @@ async function switchWorkspace(root) {
 }
 
 /* ------------------------------------------------------------------ */
+/* 导出 PDF                                                            */
+/* ------------------------------------------------------------------ */
+
+/**
+ * 以前导出 PDF 是「打开一个网页 → Ctrl+P → 系统打印对话框 → 手动敲文件名」，
+ * 中间那两步慢且容易写错。这里直接用 Chromium 的 printToPDF：
+ * 先弹一个已经填好文件名的保存框，确认后后台渲染、写盘、定位到文件，全程不弹打印对话框。
+ */
+const PRINT_OPTS = {
+  printBackground: true,
+  preferCSSPageSize: true,
+  pageSize: 'A4',
+  margins: { top: 0, bottom: 0, left: 0, right: 0 },
+}
+
+/** 打印前把折叠块展开、等字体就位：否则 PDF 里只剩一行标题、字体也可能是回退字形 */
+const BEFORE_PRINT = `(async () => {
+  document.querySelectorAll('details').forEach((d) => { d.open = true })
+  if (document.fonts && document.fonts.ready) { try { await document.fonts.ready } catch (e) {} }
+  await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))
+  return true
+})()`
+
+function safeFileName(name, ext = '.pdf') {
+  const base = String(name || 'MathFlow 文档')
+    .replace(/[\\/:*?"<>|]/g, '-')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 120)
+  const stem = base.toLowerCase().endsWith(ext) ? base.slice(0, -ext.length) : base
+  return `${stem || 'MathFlow 文档'}${ext}`
+}
+
+/** 保存位置默认就是文档所在目录；传进来的相对目录必须留在工作区内 */
+function resolveOutDir(dirHint) {
+  const fallback = currentRoot ?? app.getPath('documents')
+  if (!dirHint || !currentRoot) return fallback
+  const abs = path.resolve(currentRoot, dirHint)
+  const rel = path.relative(currentRoot, abs)
+  if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) return abs === currentRoot ? currentRoot : fallback
+  return abs
+}
+
+async function askSavePath(payload) {
+  const dir = resolveOutDir(payload?.dirHint)
+  const options = {
+    title: '导出 PDF',
+    defaultPath: path.join(dir, safeFileName(payload?.defaultName)),
+    filters: [{ name: 'PDF 文档', extensions: ['pdf'] }],
+    properties: ['createDirectory', 'showOverwriteConfirmation'],
+  }
+  const picked = win ? await dialog.showSaveDialog(win, options) : await dialog.showSaveDialog(options)
+  return picked.canceled || !picked.filePath ? null : picked.filePath
+}
+
+ipcMain.handle('mf:export-pdf', async (_event, payload = {}) => {
+  let page = null
+  let tmp = ''
+  try {
+    if (typeof payload.html !== 'string' || !payload.html.trim()) {
+      return { ok: false, error: '没有可导出的内容' }
+    }
+    const target = await askSavePath(payload)
+    if (!target) return { ok: false, canceled: true }
+
+    // 自包含 HTML 里有内联字体，走临时文件比 data: URL 稳（后者有长度上限）
+    tmp = path.join(app.getPath('temp'), `mathflow-print-${process.pid}-${Date.now()}.html`)
+    await fsp.writeFile(tmp, payload.html, 'utf8')
+
+    page = new BrowserWindow({
+      show: false,
+      backgroundColor: '#ffffff',
+      webPreferences: { offscreen: false, javascript: true, contextIsolation: true, sandbox: true },
+    })
+    await page.loadFile(tmp)
+    await page.webContents.executeJavaScript(BEFORE_PRINT, true).catch(() => {})
+    const pdf = await page.webContents.printToPDF(PRINT_OPTS)
+    await fsp.writeFile(target, pdf)
+    shell.showItemInFolder(target)
+    return { ok: true, filePath: target, bytes: pdf.length }
+  } catch (err) {
+    return { ok: false, error: String(err?.message ?? err) }
+  } finally {
+    try {
+      page?.destroy()
+    } catch {
+      /* 窗口可能已经自己关了 */
+    }
+    if (tmp) fsp.rm(tmp, { force: true }).catch(() => {})
+  }
+})
+
+ipcMain.handle('mf:print-current', async (_event, payload = {}) => {
+  try {
+    if (!win) return { ok: false, error: '窗口已关闭' }
+    const target = await askSavePath(payload)
+    if (!target) return { ok: false, canceled: true }
+    const pdf = await win.webContents.printToPDF(PRINT_OPTS)
+    await fsp.writeFile(target, pdf)
+    shell.showItemInFolder(target)
+    return { ok: true, filePath: target, bytes: pdf.length }
+  } catch (err) {
+    return { ok: false, error: String(err?.message ?? err) }
+  }
+})
+
+/* ------------------------------------------------------------------ */
 /* 窗口                                                                */
 /* ------------------------------------------------------------------ */
 
@@ -160,6 +267,7 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       spellcheck: false,
+      preload: path.join(__dirname, 'preload.cjs'),
     },
   })
 

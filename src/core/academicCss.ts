@@ -78,13 +78,7 @@ break-inside:avoid;display:flow-root;--mf-thm-tint:#eef4ff;--mf-thm-line:#c6ccd8
 .mf-proof .mf-thm-body>.mf-p:first-child{text-indent:0}
 .mf-proof-title{font-family:var(--mf-sans);font-size:.92em;color:#64748b}
 .mf-qed{display:inline-block;margin-left:.45em;color:#000;font-size:.95em;line-height:1;white-space:nowrap}
-/* 英文文档：标签与 Proof 粗黑体，定理正文斜体，证明正体 */
-.mf-thm-en .mf-thm-body{font-family:var(--mf-serif);font-style:italic}
-.mf-thm-en .mf-thm-body .katex,.mf-thm-en .mf-thm-body .katex-display,.mf-thm-en .mf-thm-body .mf-eq{font-style:normal}
-.mf-thm-en.mf-proof .mf-thm-body,.mf-thm-en.mf-thm-remark .mf-thm-body{font-style:normal}
-.mf-thm-en .mf-proof-q{font-family:var(--mf-serif);font-style:normal;font-weight:800;color:#000}
-.mf-thm-en .mf-thm-inline-label{color:#000}
-.mf-thm-en .mf-qed{font-style:normal}
+/* 环境固定按中文讲义排：中文标签 + 正体正文，不再随内容语种切成英文/斜体 */
 .mf-box{margin:1em 0;padding:10px 14px;background:#f8f9fb;border:1px dashed #dfe3ea;border-radius:8px;display:flow-root}
 .mf-box-title{font-family:var(--mf-sans);font-weight:700;font-size:.92em;margin-bottom:4px}
 :root[data-thm-style='beamer'] .mf-thm{padding:0;border:none;border-radius:10px;background:#fff;

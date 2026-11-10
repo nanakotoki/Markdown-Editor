@@ -37,6 +37,8 @@ const IGNORED_DIRS = new Set([
 const MAX_TREE_DEPTH = 10
 const MAX_TREE_ENTRIES = 4000
 const MAX_FILE_BYTES = 16 * 1024 * 1024
+/** 粘贴进来的截图 / 拖进来的资源允许更大一些；base64 后约为原体积的 4/3 */
+const MAX_ASSET_BYTES = 40 * 1024 * 1024
 
 export class HttpError extends Error {
   constructor(status, message) {
@@ -195,6 +197,31 @@ export async function writeTextFile(root, rel, content) {
     size: stat.size,
     hash: createHash('sha1').update(content).digest('hex').slice(0, 12),
   }
+}
+
+/**
+ * 二进制写入：粘贴的截图走这里。base64 进，字节落盘。
+ * 同样先写临时文件再 rename，避免写一半留下坏图。
+ */
+export async function writeBinaryFile(root, rel, base64) {
+  const abs = safeJoin(root, rel)
+  if (typeof base64 !== 'string' || !base64.trim()) throw new HttpError(400, '图片内容为空')
+  const buf = Buffer.from(base64.replace(/^data:[^;]+;base64,/, ''), 'base64')
+  if (!buf.length) throw new HttpError(400, '图片内容为空')
+  if (buf.length > MAX_ASSET_BYTES) throw new HttpError(413, '图片超过 40MB，请先压缩')
+
+  await fs.mkdir(path.dirname(abs), { recursive: true })
+  const tmp = `${abs}.mf-tmp-${process.pid}-${Date.now()}`
+  await fs.writeFile(tmp, buf)
+  try {
+    await fs.rename(tmp, abs)
+  } catch (e) {
+    await fs.rm(tmp, { force: true })
+    await fs.writeFile(abs, buf)
+    if (e?.code !== 'EPERM' && e?.code !== 'EACCES' && e?.code !== 'EBUSY') throw e
+  }
+  const stat = await fs.stat(abs)
+  return { path: toRel(root, abs), size: stat.size, mtime: stat.mtimeMs }
 }
 
 /** 新建文件；已存在则报 409，避免覆盖用户内容 */

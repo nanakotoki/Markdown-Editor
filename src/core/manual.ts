@@ -73,6 +73,12 @@ export const MANUAL_SECTIONS: ManualSection[] = [
         tag: '快捷键',
       },
       {
+        title: '粘贴图片',
+        syntax: 'Ctrl + V',
+        note: '截屏（Win+Shift+S）、截图工具、网页上右键「复制图片」，都可以直接在编辑区里粘贴。桌面版会把图片存进当前文档旁边的 `assets/`，文件名带时间戳（`paste-20261110-201045.png`），正文里自动插入 `![](assets/…)`，不用再手动存文件、抄路径。也支持把图片文件直接拖进编辑区；一次拖多张会依次插入。浏览器内文档没有磁盘目录，只能把图片内嵌成 data URL，体积别超过 1.5MB。',
+        tag: '编辑',
+      },
+      {
         title: '打开别的工作区',
         syntax: 'Ctrl + O',
         note: '选一个已有的论文目录，之后会记住。文件和子目录会被原样读取，不会改动你的目录结构。',
@@ -81,7 +87,7 @@ export const MANUAL_SECTIONS: ManualSection[] = [
       {
         title: '阅读模式 · 分页预览',
         syntax: '\\newpage',
-        note: '顶部「阅读」按 A4 纸面排版，每页底部有页码，虚线的位置就是分页处。想强制换页，在源码里单独一行写 \\newpage（也认 \\pagebreak、<!-- pagebreak -->、::: pagebreak）；不写也会按内容自动分页，定理框、公式、表格不会被切开。阅读区右上角的「打印 / 存为 PDF」按当前分页打印，打出来和屏幕上看到的一样。',
+        note: '顶部「阅读」按 A4 纸面排版，每页底部有页码，虚线的位置就是分页处。想强制换页，在源码里单独一行写 \\newpage（也认 \\pagebreak、<!-- pagebreak -->、::: pagebreak）；不写也会按内容自动分页，定理框、公式、表格不会被切开。阅读区右上角的「导出 PDF」按当前分页出文件：桌面版会直接弹保存框，文件名已按文档标题填好，回车即得 PDF，不经过系统的打印对话框；浏览器里则退回 Ctrl+P。',
         block: true,
         tag: '排版',
       },

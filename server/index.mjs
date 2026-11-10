@@ -8,6 +8,7 @@ import {
   readTree,
   readTextFile,
   writeTextFile,
+  writeBinaryFile,
   createTextFile,
   createDirectory,
   movePath,
@@ -425,6 +426,14 @@ async function handleApi(req, res, root, opts) {
     const body = await readBody(req)
     if (!body.path) throw new HttpError(400, '缺少 path')
     return json(res, 201, await createTextFile(root, body.path, body.content ?? ''))
+  }
+
+  /* 图片 / 附件：base64 落盘。粘贴截图、拖进来的资源都走这里 */
+  if (route === '/asset' && method === 'POST') {
+    assertWritable(opts)
+    const body = await readBody(req, 56 * 1024 * 1024)
+    if (!body.path) throw new HttpError(400, '缺少 path')
+    return json(res, 201, await writeBinaryFile(root, body.path, body.base64))
   }
 
   if (route === '/file' && method === 'DELETE') {

@@ -237,8 +237,9 @@ const THM_TYPES: Record<string, { cn: string; en: string; kind: RefKind; env: st
 }
 
 /**
- * 容器内容是不是英文（判据见 numbering.isEnglishText）。
- * 英文文档按 “Theorem 1.1 + 斜体正文 + Proof.” 排，中文按讲义习惯排。
+ * 引用前缀与语言判定。
+ * 环境（定理 / 证明 / 解答）一律按中文讲义排；isEnglishText 只留给文档级语言
+ * （目录标题、公式引用前缀这类整体性文案）用。
  */
 
 const REF_PREFIX_CN: Record<string, string> = {
@@ -914,21 +915,18 @@ function renderContainer(node: any, ctx: Ctx): string {
     return `<div class="mf-box mf-box-generic">${title ? `<div class="mf-box-title">${escapeHtml(title)}</div>` : ''}${inner}</div>`
   }
 
-  // 英文文档：标签用 Theorem / Lemma…，正文斜体，证明用 Proof. + 正体
-  const en = isEnglishText(`${title ?? ''} ${inner}`)
-  const langClass = en ? ' mf-thm-en' : ''
-
+  // 环境标题与正文固定按中文讲义排：中文标签、正文正体。
+  // 早先会按内容语种自动切成「Theorem 1.1 + 斜体正文」——英文段落一多就整段变斜、
+  // 标题也跟着变英文，同一篇文档里像混了两套排法，这条路已经去掉。
   if (meta.env === 'proof') {
     if (id) {
       const m = ctx.thmMeta.get(id)
       if (m) m.previewHtml = inner
     }
     // data-mf-splittable：长证明允许跨页（分页器会把正文段落切开、分到两页上）
-    return `<div class="mf-thm mf-proof${langClass}" data-mf-splittable="1"${id ? ` id="${anchorOf(id)}"` : ''}>
-      <div class="mf-thm-body" data-mf-flow="1"><span class="mf-proof-q" data-mf-only-first="1">${en ? 'Proof.' : '证'}</span>${
-        title
-          ? `<span class="mf-proof-title" data-mf-only-first="1">${en ? ` (${escapeHtml(title)})` : `（${escapeHtml(title)}）`}</span>`
-          : ''
+    return `<div class="mf-thm mf-proof" data-mf-splittable="1"${id ? ` id="${anchorOf(id)}"` : ''}>
+      <div class="mf-thm-body" data-mf-flow="1"><span class="mf-proof-q" data-mf-only-first="1">证</span>${
+        title ? `<span class="mf-proof-title" data-mf-only-first="1">（${escapeHtml(title)}）</span>` : ''
       }${appendQed(inner, ctx.qed)}</div>
     </div>`
   }
@@ -938,8 +936,8 @@ function renderContainer(node: any, ctx: Ctx): string {
       const m = ctx.thmMeta.get(id)
       if (m) m.previewHtml = inner
     }
-    return `<div class="mf-thm mf-thm-remark${langClass}"${id ? ` id="${anchorOf(id)}"` : ''}>
-      <div class="mf-thm-body"><span class="mf-thm-inline-label">${en ? meta.en : meta.cn}</span>${inner}</div>
+    return `<div class="mf-thm mf-thm-remark"${id ? ` id="${anchorOf(id)}"` : ''}>
+      <div class="mf-thm-body"><span class="mf-thm-inline-label">${meta.cn}</span>${inner}</div>
     </div>`
   }
 
@@ -949,25 +947,23 @@ function renderContainer(node: any, ctx: Ctx): string {
       const m = ctx.thmMeta.get(id)
       if (m) m.previewHtml = inner
     }
-    return `<div class="mf-thm mf-solution${langClass}" data-mf-splittable="1"${id ? ` id="${anchorOf(id)}"` : ''}>
-      <div class="mf-thm-body" data-mf-flow="1"><span class="mf-sol-q" data-mf-only-first="1">${en ? 'Solution.' : '解'}</span>${
-        title ? `<span class="mf-proof-title" data-mf-only-first="1">${en ? ` (${escapeHtml(title)})` : `（${escapeHtml(title)}）`}</span>` : ''
+    return `<div class="mf-thm mf-solution" data-mf-splittable="1"${id ? ` id="${anchorOf(id)}"` : ''}>
+      <div class="mf-thm-body" data-mf-flow="1"><span class="mf-sol-q" data-mf-only-first="1">解</span>${
+        title ? `<span class="mf-proof-title" data-mf-only-first="1">（${escapeHtml(title)}）</span>` : ''
       }${inner}</div>
     </div>`
   }
 
   const n = node.data?.mfThmNo ?? 1
   const section = node.data?.mfThmSection ?? 1
-  const labelText = thmLabel(en ? meta.en : meta.cn, section, n, ctx.numbering.thm)
+  const labelText = thmLabel(meta.cn, section, n, ctx.numbering.thm)
   if (id) {
     const m = ctx.thmMeta.get(id)
     if (m) m.previewHtml = inner
   }
-  return `<div class="mf-thm mf-thm-${meta.env}${langClass}"${id ? ` id="${anchorOf(id)}"` : ''}>
+  return `<div class="mf-thm mf-thm-${meta.env}"${id ? ` id="${anchorOf(id)}"` : ''}>
     <div class="mf-thm-head"><span class="mf-thm-label">${escapeHtml(labelText)}</span>${
-      title
-        ? `<span class="mf-thm-title">${en ? ` (${escapeHtml(title)})` : `（${escapeHtml(title)}）`}</span>`
-        : ''
+      title ? `<span class="mf-thm-title">（${escapeHtml(title)}）</span>` : ''
     }</div>
     <div class="mf-thm-body">${inner}</div>
   </div>`

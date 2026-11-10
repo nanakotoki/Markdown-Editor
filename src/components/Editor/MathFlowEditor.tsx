@@ -12,6 +12,7 @@ import { markdownPreviewPlugin, markdownSmartInput } from './cmMarkdownPreview'
 import { refCompletion } from './cmRefCompletion'
 import FloatingMathHUD from './FloatingMathHUD'
 import { editorBridge } from '../../store/editorBridge'
+import { blobToDataUrl, clipboardHtmlImage, clipboardImage, droppedImages, savePastedImage } from '../../core/pasteImage'
 import { renderMathSafely, mathRangeAt, type MacroMap } from '../../core/katexSafeRender'
 import { renderMarkdown, type RefEntry } from '../../core/renderMarkdown'
 import { computePageBreakLines } from '../../core/pageBreaks'
@@ -224,6 +225,62 @@ export default function MathFlowEditor({
     })
   }, [])
 
+  /** 图片单独成段：光标在空行上就直接放，否则前后各留一个空行，免得粘成行内图 */
+  const insertImages = useCallback(
+    (view: EditorView, lines: string[]) => {
+      if (!lines.length) return
+      const sel = view.state.selection.main
+      const doc = view.state.doc
+      const line = doc.lineAt(sel.from)
+      const before = doc.sliceString(line.from, sel.from)
+      const after = doc.sliceString(sel.to, line.to)
+      const onEmptyLine = !before.trim() && !after.trim()
+      const payload = lines.join('\n\n')
+      const text = onEmptyLine ? `${payload}\n` : `\n\n${payload}\n\n`
+      view.dispatch({
+        changes: { from: sel.from, to: sel.to, insert: text },
+        selection: { anchor: sel.from + text.length },
+        scrollIntoView: true,
+      })
+      view.focus()
+      flush()
+    },
+    [flush]
+  )
+
+  /**
+   * 粘贴 / 拖入图片：桌面版（本地模式）把字节写进文档同级的 assets/，
+   * 编辑器里立刻出现 ![](assets/paste-….png)；浏览器模式的文档没有磁盘位置，
+   * 只能退化成内嵌 data URL——那是唯一能跟着文档一起存下来的形式。
+   */
+  const acceptImages = useCallback(
+    async (view: EditorView, files: File[]) => {
+      const st = useEditorStore.getState()
+      const docPath = st.docs.find((d) => d.id === docId)?.filePath
+      const lines: string[] = []
+      for (const f of files) {
+        try {
+          if (st.mode === 'local') {
+            const saved = await savePastedImage(f, docPath)
+            lines.push(`![](${saved.markdownPath})`)
+            st.showToast(`图片已存到 ${saved.workspacePath}`, 'success')
+          } else {
+            if (f.size > 1_500_000) {
+              st.showToast('浏览器内文档存不下这么大的图片，请改用桌面版或先压缩', 'warn')
+              continue
+            }
+            lines.push(`![](${await blobToDataUrl(f)})`)
+            st.showToast('图片已内嵌进文档（浏览器模式没有磁盘目录）', 'info')
+          }
+        } catch (e: any) {
+          st.showToast(e?.message ?? '图片写入失败', 'warn')
+        }
+      }
+      if (view.dom.isConnected) insertImages(view, lines)
+    },
+    [docId, insertImages]
+  )
+
   useEffect(() => {
     if (!hostRef.current) return
     const state = EditorState.create({
@@ -297,6 +354,23 @@ export default function MathFlowEditor({
           if (u.docChanged || u.selectionSet || u.focusChanged) syncHud(u.view)
         }),
         EditorView.domEventHandlers({
+          // 剪贴板里有图就吃掉这次粘贴，不让图片类型掉进源码变成一串乱码
+          paste: (e, view) => {
+            const image = clipboardImage(e.clipboardData) ?? clipboardHtmlImage(e.clipboardData)
+            if (!image) return false
+            e.preventDefault()
+            void acceptImages(view, [image])
+            return true
+          },
+          drop: (e, view) => {
+            const files = droppedImages(e.dataTransfer)
+            if (!files.length) return false
+            e.preventDefault()
+            const pos = view.posAtCoords({ x: e.clientX, y: e.clientY })
+            if (pos != null) view.dispatch({ selection: { anchor: pos } })
+            void acceptImages(view, files)
+            return true
+          },
           mousedown: (e, view) => {
             const target = e.target as HTMLElement | null
             const widget = target?.closest('.mf-cm-inline, .mf-cm-block') as HTMLElement | null

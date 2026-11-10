@@ -21,6 +21,12 @@ export interface HtmlExportOptions {
   macros?: MacroMap
   bib?: BibEntry[]
   settings?: Settings
+  /**
+   * 相对资源的绝对前缀（如 `http://127.0.0.1:4321/ws/chapters`）。
+   * 下载给别人时不要传：那样图片仍是相对路径，整个文件夹拷走就能离线打开；
+   * 在应用内打 PDF 时要传：临时文件没有「当前目录」可参照。
+   */
+  assetBase?: string
 }
 
 function esc(s: string) {
@@ -38,6 +44,7 @@ export async function buildStandaloneHtml(markdown: string, opts: HtmlExportOpti
     qed: settings.qedSymbol,
     headingNumbering: settings.headingNumbering,
     figNumbering: settings.figNumbering,
+    assetBase: opts.assetBase,
   })
   const katex = await getInlinedKatexCss()
   const date = new Date().toLocaleDateString('zh-CN')
