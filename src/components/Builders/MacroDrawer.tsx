@@ -109,7 +109,7 @@ export default function MacroDrawer({ open, onClose }: { open: boolean; onClose:
             <div className="mb-1 text-[11px] font-medium text-ink-500">已解析 {parsed.length} 条</div>
             <div className="flex flex-wrap gap-1.5">
               {parsed.map((d) => (
-                <span key={d.id} className="rounded bg-white px-1.5 py-0.5 font-mono text-[11px] text-accent-700 ring-1 ring-ink-100">
+                <span key={d.id} className="rounded bg-surface px-1.5 py-0.5 font-mono text-[11px] text-accent-700 ring-1 ring-ink-100">
                   {d.name}
                   {d.args ? `[${d.args}]` : ''}
                 </span>
@@ -221,7 +221,7 @@ export default function MacroDrawer({ open, onClose }: { open: boolean; onClose:
                   }
                   setAIConfig({ provider: p, ...presets[p] })
                 }}
-                className="w-full rounded-lg border border-ink-200 bg-white px-2.5 py-1.5 text-[13px] outline-none focus:border-accent-400"
+                className="w-full rounded-lg border border-ink-200 bg-surface px-2.5 py-1.5 text-[13px] outline-none focus:border-accent-400"
               >
                 <option value="deepseek">DeepSeek</option>
                 <option value="openai">OpenAI / 兼容</option>

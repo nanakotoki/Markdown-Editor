@@ -28,7 +28,7 @@ export function Button({
     default: 'bg-ink-100 text-ink-700 hover:bg-ink-200',
     primary: 'bg-accent-600 text-white shadow-sm hover:bg-accent-700',
     ghost: 'text-ink-500 hover:bg-ink-100 hover:text-ink-800',
-    outline: 'border border-ink-200 bg-white text-ink-700 hover:border-accent-300 hover:text-accent-700',
+    outline: 'border border-ink-200 bg-surface text-ink-700 hover:border-accent-300 hover:text-accent-700',
     danger: 'bg-rose-600 text-white hover:bg-rose-700',
   }
   return (
@@ -89,9 +89,9 @@ export function Modal({
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-50 bg-ink-900/25 backdrop-blur-[2px]" />
+        <Dialog.Overlay className="fixed inset-0 z-50 bg-solid/40 backdrop-blur-[2px]" />
         <Dialog.Content
-          className={`fixed left-1/2 top-1/2 z-50 w-[94vw] ${width} -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-2xl border border-ink-200 bg-white shadow-panel focus:outline-none`}
+          className={`fixed left-1/2 top-1/2 z-50 w-[94vw] ${width} -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-2xl border border-ink-200 bg-surface shadow-panel focus:outline-none`}
         >
           <div className="flex items-start justify-between gap-4 border-b border-ink-100 px-5 py-3.5">
             <div className="flex items-start gap-2.5">
@@ -133,7 +133,7 @@ export function Segmented<T extends string>({
           key={o.value}
           onClick={() => onChange(o.value)}
           className={`inline-flex items-center gap-1 rounded-[7px] px-2.5 py-1 text-[12px] font-medium transition ${
-            value === o.value ? 'bg-white text-ink-900 shadow-sm' : 'text-ink-500 hover:text-ink-700'
+            value === o.value ? 'bg-surface text-ink-900 shadow-sm' : 'text-ink-500 hover:text-ink-700'
           }`}
         >
           {o.icon}
@@ -178,7 +178,7 @@ export function TextInput({
       onChange={(e) => onChange(e.target.value)}
       onKeyDown={onKeyDown}
       placeholder={placeholder}
-      className={`w-full rounded-lg border border-ink-200 bg-white px-2.5 py-1.5 text-[13px] text-ink-800 outline-none transition placeholder:text-ink-300 focus:border-accent-400 focus:ring-2 focus:ring-accent-100 ${
+      className={`w-full rounded-lg border border-ink-200 bg-surface px-2.5 py-1.5 text-[13px] text-ink-800 outline-none transition placeholder:text-ink-300 focus:border-accent-400 focus:ring-2 focus:ring-accent-100 ${
         mono ? 'font-mono text-[12.5px]' : ''
       } ${className}`}
     />
@@ -206,7 +206,7 @@ export function TextArea({
       rows={rows}
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
-      className={`w-full resize-y rounded-lg border border-ink-200 bg-white px-2.5 py-2 text-[13px] leading-relaxed text-ink-800 outline-none transition placeholder:text-ink-300 focus:border-accent-400 focus:ring-2 focus:ring-accent-100 ${
+      className={`w-full resize-y rounded-lg border border-ink-200 bg-surface px-2.5 py-2 text-[13px] leading-relaxed text-ink-800 outline-none transition placeholder:text-ink-300 focus:border-accent-400 focus:ring-2 focus:ring-accent-100 ${
         mono ? 'font-mono text-[12.5px]' : ''
       } ${className}`}
     />

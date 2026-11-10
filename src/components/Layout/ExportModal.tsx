@@ -79,7 +79,15 @@ export default function ExportModal({ open, onClose }: { open: boolean; onClose:
     if (!open || tab !== 'html') return
     let cancelled = false
     setBuilding(true)
-    buildStandaloneHtml(liveContent, { title, macros: macroMap, bib: bibEntries, settings, assetBase })
+    buildStandaloneHtml(liveContent, {
+      title,
+      macros: macroMap,
+      bib: bibEntries,
+      settings,
+      assetBase,
+      // 应用内预览与字体同源，不必把字体塞成 base64，弹窗打开更快
+      inlineFonts: !assetBase,
+    })
       .then((r) => {
         if (!cancelled) setHtml(r.html)
       })
@@ -116,19 +124,34 @@ export default function ExportModal({ open, onClose }: { open: boolean; onClose:
   }
 
   /**
-   * 导出 PDF：桌面版直接走 Chromium 的 printToPDF——保存框里文件名已经填好，
-   * 回车即出文件，不经过「系统打印 → 另存为 PDF → 再敲一遍文件名」那一圈。
+   * 导出 PDF：桌面版走 Chromium 的 printToPDF，**不弹保存框**——
+   * 文件名按文档标题起好、直接落在文档所在目录，重名自动加 (2)。
+   * 打印页从本地服务取（与图片、字体同源），所以插图不会丢、字体也不用内联，
+   * 整个导出通常在几百毫秒到两秒之间。
    * 浏览器版没有这条通道，只能退回新窗口 + Ctrl+P。
    */
   const exportPdf = async () => {
     setPdfBusy(true)
     try {
-      const r = await buildStandaloneHtml(liveContent, { title, macros: macroMap, bib: bibEntries, settings, assetBase })
       const bridge = desktop()
+      // 桌面版：字体不内联（同源直接取），HTML 从几 MB 降到几十 KB
+      const r = await buildStandaloneHtml(liveContent, {
+        title,
+        macros: macroMap,
+        bib: bibEntries,
+        settings,
+        assetBase,
+        inlineFonts: !bridge,
+      })
       if (bridge) {
         const res = await bridge.exportPdf({ html: r.html, defaultName: `${title}.pdf`, dirHint: docDir })
-        if (res.canceled) return
-        showToast(res.ok ? `已导出 PDF：${res.filePath}` : (res.error ?? '导出失败'), res.ok ? 'success' : 'warn')
+        if (res.ok) {
+          const kb = res.bytes ? `，${Math.max(1, Math.round(res.bytes / 1024))} KB` : ''
+          const sec = res.ms ? `，用时 ${(res.ms / 1000).toFixed(1)} 秒` : ''
+          showToast(`已导出：${res.filePath}${kb}${sec}`, 'success')
+        } else {
+          showToast(res.error ?? '导出失败', 'warn')
+        }
         return
       }
       const ok = openHtmlInNewWindow(r.html)
@@ -236,10 +259,10 @@ export default function ExportModal({ open, onClose }: { open: boolean; onClose:
               </span>
               <span className="text-[10.5px] text-ink-400">{texLines.length} 行</span>
             </div>
-            <div className="max-h-[320px] overflow-auto bg-ink-900 py-2">
-              <pre className="font-mono text-[11.5px] leading-[1.65] text-ink-100">
+            <div className="max-h-[320px] overflow-auto bg-solid py-2">
+              <pre className="font-mono text-[11.5px] leading-[1.65] text-white/80">
                 {texLines.map((line, i) => (
-                  <div key={i} className="flex hover:bg-white/5">
+                  <div key={i} className="flex hover:bg-surface/5">
                     <span className="w-9 shrink-0 select-none pr-3 text-right text-[10px] text-ink-500">{i + 1}</span>
                     <span className="whitespace-pre-wrap break-all pr-4">{line || ' '}</span>
                   </div>
@@ -326,7 +349,7 @@ export default function ExportModal({ open, onClose }: { open: boolean; onClose:
               <iframe
                 title="html-preview"
                 srcDoc={html.replace('</head>', '<style>.mf-print-bar{display:none!important}</style></head>')}
-                className="h-[400px] w-full bg-white"
+                className="h-[400px] w-full bg-surface"
               />
             ) : (
               <div className="flex h-[400px] items-center justify-center text-[12px] text-ink-400">
@@ -337,10 +360,10 @@ export default function ExportModal({ open, onClose }: { open: boolean; onClose:
 
           <div className="rounded-lg bg-ink-50 px-3 py-2 text-[11px] leading-relaxed text-ink-500">
             HTML 采用与预览完全一致的渲染管线（定理编号、三线表、算法块、交叉引用）。
-            <code className="mx-1 rounded bg-white px-1">@media print</code>
+            <code className="mx-1 rounded bg-surface px-1">@media print</code>
             已针对 A4 调校：页边距 20mm、行间公式与正文同字号、
-            <code className="rounded bg-white px-1">break-inside: avoid</code> 避免公式/定理框被跨页截断。
-            想控制换页位置，在源码里单独写一行 <code className="mx-1 rounded bg-white px-1">\newpage</code>；
+            <code className="rounded bg-surface px-1">break-inside: avoid</code> 避免公式/定理框被跨页截断。
+            想控制换页位置，在源码里单独写一行 <code className="mx-1 rounded bg-surface px-1">\newpage</code>；
             想先在应用里确认分页，切到顶部「阅读」即可看到与打印一致的 A4 页面。
           </div>
         </div>
@@ -416,7 +439,7 @@ export default function ExportModal({ open, onClose }: { open: boolean; onClose:
             <div className="rounded-xl border border-emerald-200 bg-emerald-50/40 p-3">
               <div className="flex items-center gap-1.5 text-[12px] font-medium text-emerald-800">
                 <Check size={13} /> 已写入 {bookResult.outputs.length} 篇，输出目录{' '}
-                <code className="rounded bg-white/70 px-1 font-mono text-[11px]">{bookResult.outDir}/</code>
+                <code className="rounded bg-surface/70 px-1 font-mono text-[11px]">{bookResult.outDir}/</code>
               </div>
               <div className="mt-2 space-y-1.5">
                 {bookResult.combined?.mainTex && (
@@ -467,11 +490,11 @@ export default function ExportModal({ open, onClose }: { open: boolean; onClose:
           )}
 
           <div className="rounded-lg bg-ink-50 px-3 py-2 text-[11px] leading-relaxed text-ink-500">
-            整本导出会把工作区里所有 Markdown 按文件名自然排序排成章节（<code className="rounded bg-white px-1">01-引言.md</code>{' '}
-            就排在 <code className="rounded bg-white px-1">02-方法.md</code> 前面），生成{' '}
-            <code className="rounded bg-white px-1">main.tex</code> 用 <code className="rounded bg-white px-1">\input</code>{' '}
-            引入各章正文片段。跨文件的 <code className="rounded bg-white px-1">@thm:</code> /{' '}
-            <code className="rounded bg-white px-1">@eq:</code> 引用因此在同一份 .aux 里解析，编号也统一。
+            整本导出会把工作区里所有 Markdown 按文件名自然排序排成章节（<code className="rounded bg-surface px-1">01-引言.md</code>{' '}
+            就排在 <code className="rounded bg-surface px-1">02-方法.md</code> 前面），生成{' '}
+            <code className="rounded bg-surface px-1">main.tex</code> 用 <code className="rounded bg-surface px-1">\input</code>{' '}
+            引入各章正文片段。跨文件的 <code className="rounded bg-surface px-1">@thm:</code> /{' '}
+            <code className="rounded bg-surface px-1">@eq:</code> 引用因此在同一份 .aux 里解析，编号也统一。
           </div>
         </div>
       )}

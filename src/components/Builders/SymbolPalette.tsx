@@ -122,7 +122,7 @@ export default function SymbolPalette({ open, onClose }: { open: boolean; onClos
                     key={it.group + it.name + it.insert}
                     title={`${it.name}\n${it.insert}${searching ? `\n（${it.group}）` : ''}`}
                     onClick={() => insert(it.insert)}
-                    className="flex h-[54px] flex-col items-center justify-center gap-1 rounded-lg border border-ink-100 bg-white px-1 transition hover:border-accent-300 hover:bg-accent-50/40"
+                    className="flex h-[54px] flex-col items-center justify-center gap-1 rounded-lg border border-ink-100 bg-surface px-1 transition hover:border-accent-300 hover:bg-accent-50/40"
                   >
                     <span
                       className="max-w-full overflow-hidden text-[13px] text-ink-800"

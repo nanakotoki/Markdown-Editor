@@ -76,7 +76,7 @@ export default function ManualModal({ open, onClose }: { open: boolean; onClose:
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
                 placeholder="搜语法 / 关键词"
-                className="h-7 w-full rounded-md border border-ink-200 bg-white pl-6 pr-2 text-[11.5px] outline-none placeholder:text-ink-300 focus:border-accent-300 focus:ring-2 focus:ring-accent-100"
+                className="h-7 w-full rounded-md border border-ink-200 bg-surface pl-6 pr-2 text-[11.5px] outline-none placeholder:text-ink-300 focus:border-accent-300 focus:ring-2 focus:ring-accent-100"
               />
             </div>
           </div>
@@ -90,8 +90,8 @@ export default function ManualModal({ open, onClose }: { open: boolean; onClose:
                 }}
                 className={`mb-0.5 flex w-full items-center justify-between rounded-lg px-2 py-[5px] text-left text-[12px] transition ${
                   !searching && active === s.id
-                    ? 'bg-white font-medium text-accent-700 shadow-[0_1px_2px_rgba(15,23,42,0.06)]'
-                    : 'text-ink-600 hover:bg-white/70'
+                    ? 'bg-surface font-medium text-accent-700 shadow-[0_1px_2px_rgba(15,23,42,0.06)]'
+                    : 'text-ink-600 hover:bg-surface/70'
                 }`}
               >
                 <span className="truncate">{s.title}</span>
@@ -106,8 +106,8 @@ export default function ManualModal({ open, onClose }: { open: boolean; onClose:
               }}
               className={`flex w-full items-center gap-1.5 rounded-lg px-2 py-[5px] text-left text-[12px] transition ${
                 !searching && active === 'tips'
-                  ? 'bg-white font-medium text-amber-700 shadow-[0_1px_2px_rgba(15,23,42,0.06)]'
-                  : 'text-ink-600 hover:bg-white/70'
+                  ? 'bg-surface font-medium text-amber-700 shadow-[0_1px_2px_rgba(15,23,42,0.06)]'
+                  : 'text-ink-600 hover:bg-surface/70'
               }`}
             >
               <Lightbulb size={12} className="text-amber-500" />
@@ -147,7 +147,7 @@ export default function ManualModal({ open, onClose }: { open: boolean; onClose:
               </div>
               <div className="space-y-2">
                 {MANUAL_TIPS.map((t, i) => (
-                  <div key={t.title} className="rounded-xl border border-ink-100 bg-white px-3 py-2.5">
+                  <div key={t.title} className="rounded-xl border border-ink-100 bg-surface px-3 py-2.5">
                     <div className="flex items-start gap-2">
                       <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-amber-100 text-[10px] font-semibold text-amber-700">
                         {i + 1}
@@ -191,7 +191,7 @@ function EntryCard({
 }) {
   const canInsert = Boolean(entry.syntax) && !isShortcutOnly(entry)
   return (
-    <div className="rounded-xl border border-ink-100 bg-white px-3 py-2.5 transition hover:border-ink-200">
+    <div className="rounded-xl border border-ink-100 bg-surface px-3 py-2.5 transition hover:border-ink-200">
       <div className="flex items-start justify-between gap-2">
         <div className="flex min-w-0 items-center gap-1.5">
           <span className="text-[12.5px] font-medium text-ink-800">{entry.title}</span>
@@ -215,7 +215,7 @@ function EntryCard({
       </div>
 
       {entry.syntax && (
-        <pre className="mt-1.5 overflow-x-auto whitespace-pre-wrap break-words rounded-lg bg-ink-900/[0.04] px-2.5 py-1.5 font-mono text-[11.5px] leading-[1.55] text-ink-700">
+        <pre className="mt-1.5 overflow-x-auto whitespace-pre-wrap break-words rounded-lg bg-ink-100 px-2.5 py-1.5 font-mono text-[11.5px] leading-[1.55] text-ink-700">
           {entry.syntax}
         </pre>
       )}

@@ -160,7 +160,7 @@ export default function AIAssistantModal({
             <TextArea value={latex} onChange={setLatex} rows={4} mono />
           </Field>
 
-          <div className="rounded-xl border border-ink-200 bg-white">
+          <div className="rounded-xl border border-ink-200 bg-surface">
             <div className="flex items-center justify-between border-b border-ink-100 px-3 py-1.5">
               <span className="text-[11px] font-medium text-ink-400">实时预览</span>
               {stream && <span className="truncate text-[10.5px] text-accent-500">流式输出中…</span>}

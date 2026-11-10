@@ -101,6 +101,9 @@ export interface AIConfig {
 /** 单个「字体角色」的可选值：宋体 / 黑体 / 楷体 / 跟随正文 / 自定义 */
 export type RoleFontKey = 'serif' | 'sans' | 'kai' | 'follow' | 'custom'
 
+/** 界面主题。纸面（阅读模式那几张 A4）不受影响，永远是白的。 */
+export type ThemeMode = 'light' | 'dark' | 'system'
+
 export interface Settings {
   autoNumberEquations: boolean
   citationStyle: 'numeric' | 'author-year'
@@ -134,6 +137,8 @@ export interface Settings {
   editorFont: 'serif' | 'mono' | 'sans' | 'kai'
   editorFontCustom: string
   editorFontSize: number
+  /* ---- 界面主题：浅色 / 深色 / 跟随系统 ---- */
+  theme: ThemeMode
   /* ---- 产出（导出 HTML / PDF）：留空则跟随预览字体 ---- */
   exportFontCustom: string
   /* ---- 分屏：滚动联动开关 ---- */
@@ -194,6 +199,7 @@ export const DEFAULT_SETTINGS: Settings = {
   editorFont: 'serif',
   editorFontCustom: '',
   editorFontSize: 15,
+  theme: 'system',
   exportFontCustom: '',
   syncScroll: true,
   thmNumbering: 'section',

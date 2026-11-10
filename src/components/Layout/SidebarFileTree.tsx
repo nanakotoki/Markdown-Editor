@@ -191,7 +191,7 @@ export default function SidebarFileTree() {
                   }
                   commitRename(node)
                 }}
-                className="min-w-0 flex-1 rounded border border-accent-400 bg-white px-1 py-0 text-[12px] text-ink-800 outline-none"
+                className="min-w-0 flex-1 rounded border border-accent-400 bg-surface px-1 py-0 text-[12px] text-ink-800 outline-none"
               />
             ) : (
               <span className={`min-w-0 flex-1 truncate ${isDir ? 'text-ink-700' : ''}`}>{node.name}</span>
@@ -318,7 +318,7 @@ function TreeContextMenu({
   return (
     <div
       ref={ref}
-      className="fixed z-[60] w-[190px] rounded-xl border border-ink-200 bg-white p-1 shadow-panel"
+      className="fixed z-[60] w-[190px] rounded-xl border border-ink-200 bg-surface p-1 shadow-panel"
       style={{ left, top }}
       role="menu"
       onContextMenu={(e) => e.preventDefault()}

@@ -335,7 +335,7 @@ export default function FunctionPlotModal({
             </div>
           )}
 
-          <div className="relative overflow-hidden rounded-xl border border-ink-200 bg-white">
+          <div className="relative overflow-hidden rounded-xl border border-ink-200 bg-surface">
             <canvas
               ref={canvasRef}
               className="h-[360px] w-full cursor-crosshair"
@@ -381,11 +381,11 @@ export default function FunctionPlotModal({
               }}
             />
             {hover && (
-              <div className="pointer-events-none absolute left-2 top-2 rounded-md bg-ink-900/85 px-2 py-1 font-mono text-[11px] text-white">
+              <div className="pointer-events-none absolute left-2 top-2 rounded-md bg-solid/85 px-2 py-1 font-mono text-[11px] text-white">
                 x = {hover.x.toFixed(3)} , y = {hover.y.toFixed(3)}
               </div>
             )}
-            <div className="pointer-events-none absolute bottom-2 right-2 rounded bg-white/80 px-1.5 py-0.5 text-[10px] text-ink-400">
+            <div className="pointer-events-none absolute bottom-2 right-2 rounded bg-surface/80 px-1.5 py-0.5 text-[10px] text-ink-400">
               滚轮缩放 · 拖拽平移
             </div>
           </div>

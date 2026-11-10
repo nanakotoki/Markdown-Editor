@@ -46,6 +46,26 @@ export default function AppearanceModal({ open, onClose }: { open: boolean; onCl
       width="max-w-4xl"
     >
       <div className="space-y-4">
+        {/* ---------------- 界面主题 ---------------- */}
+        <div className="rounded-xl border border-ink-200 p-3">
+          <SectionTitle>界面</SectionTitle>
+          <Row label="主题">
+            <Pills
+              value={settings.theme}
+              options={[
+                { v: 'light' as const, label: '浅色' },
+                { v: 'dark' as const, label: '深色' },
+                { v: 'system' as const, label: '跟随系统' },
+              ]}
+              onChange={(v) => updateSettings({ theme: v })}
+            />
+            <p className="mt-1.5 text-[11px] leading-relaxed text-ink-400">
+              只改界面：侧边栏、工具栏、编辑区、弹窗。阅读模式里的 A4 纸面永远是白的 ——
+              纸张要是跟着变黑，屏幕上排好的版和打印出来的 PDF 就对不上了。
+            </p>
+          </Row>
+        </div>
+
         {/* ---------------- 保存方式 ---------------- */}
         <div className="rounded-xl border border-ink-200 p-3">
           <SectionTitle>保存</SectionTitle>
@@ -285,7 +305,7 @@ export default function AppearanceModal({ open, onClose }: { open: boolean; onCl
               />
             </Row>
 
-            <div className="mt-2 rounded-xl border border-ink-200 bg-[#fbfcfd] px-3 py-2">
+            <div className="mt-2 rounded-xl border border-ink-200 bg-ink-50 px-3 py-2">
               <div className="mb-1 text-[11px] font-medium text-ink-400">实时效果</div>
               <div className="mf-academic">
                 <p style={{ margin: 0 }}>
@@ -293,7 +313,7 @@ export default function AppearanceModal({ open, onClose }: { open: boolean; onCl
                 </p>
               </div>
               <div
-                className="mt-2 rounded-lg bg-white px-2.5 py-1.5 text-ink-700 ring-1 ring-ink-100"
+                className="mt-2 rounded-lg bg-surface px-2.5 py-1.5 text-ink-700 ring-1 ring-ink-100"
                 style={{ fontFamily: editorFontStack(settings.editorFont), fontSize: settings.editorFontSize }}
               >
                 <div className="text-ink-400">## 源码区</div>
@@ -594,7 +614,7 @@ function RolePicker({
         <select
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className="h-6 w-full rounded-md border border-ink-200 bg-white px-1 text-[11.5px] text-ink-700 outline-none focus:border-accent-400"
+          className="h-6 w-full rounded-md border border-ink-200 bg-surface px-1 text-[11.5px] text-ink-700 outline-none focus:border-accent-400"
         >
           {options.map((o) => (
             <option key={o.v} value={o.v}>
@@ -630,7 +650,7 @@ function ChoiceCard({
     <button
       onClick={onClick}
       className={`rounded-xl border px-3 py-2 text-left transition ${
-        active ? 'border-accent-400 bg-accent-50/60 ring-1 ring-accent-200' : 'border-ink-200 bg-white hover:bg-ink-50'
+        active ? 'border-accent-400 bg-accent-50/60 ring-1 ring-accent-200' : 'border-ink-200 bg-surface hover:bg-ink-50'
       }`}
     >
       <div className="flex items-baseline justify-between gap-2">

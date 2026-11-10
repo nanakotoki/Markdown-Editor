@@ -77,8 +77,8 @@ export default function FileTabs() {
               style={{ flexBasis: n > 0 ? `${100 / n}%` : undefined }}
               className={`group relative flex min-w-0 flex-1 cursor-pointer items-center gap-1.5 border-r border-ink-200 pl-2.5 pr-6 text-[12px] transition ${
                 isActive
-                  ? 'bg-white text-ink-800'
-                  : 'bg-transparent text-ink-500 hover:bg-white/60 hover:text-ink-700'
+                  ? 'bg-surface text-ink-800'
+                  : 'bg-transparent text-ink-500 hover:bg-surface/60 hover:text-ink-700'
               }`}
             >
               {isActive && <span className="absolute inset-x-0 top-0 h-[2px] bg-accent-500" />}

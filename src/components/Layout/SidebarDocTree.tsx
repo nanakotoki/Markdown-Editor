@@ -37,7 +37,7 @@ export default function SidebarDocTree({ toc, onJump }: { toc: TocItem[]; onJump
   } = useEditorStore()
 
   return (
-    <aside className="mf-no-print flex w-[248px] shrink-0 flex-col border-r border-ink-200 bg-white">
+    <aside className="mf-no-print flex w-[248px] shrink-0 flex-col border-r border-ink-200 bg-surface">
       <div className="flex items-center gap-0.5 border-b border-ink-100 px-2 py-1.5">
         {TABS.map((t) => (
           <button

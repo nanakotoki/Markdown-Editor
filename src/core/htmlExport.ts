@@ -1,5 +1,5 @@
 import { renderMarkdown, type RenderResult } from './renderMarkdown'
-import { getInlinedKatexCss } from './clipboardExport'
+import { getInlinedKatexCss, getKatexCssWithFontUrls } from './clipboardExport'
 import { ACADEMIC_CSS } from './academicCss'
 import type { MacroMap } from './katexSafeRender'
 import { DEFAULT_SETTINGS, type BibEntry, type Settings } from '../store/useEditorStore'
@@ -24,9 +24,16 @@ export interface HtmlExportOptions {
   /**
    * 相对资源的绝对前缀（如 `http://127.0.0.1:4321/ws/chapters`）。
    * 下载给别人时不要传：那样图片仍是相对路径，整个文件夹拷走就能离线打开；
-   * 在应用内打 PDF 时要传：临时文件没有「当前目录」可参照。
+   * 在应用内打 PDF 时要传：打印页是服务上的一个地址，必须有完整主机名。
    */
   assetBase?: string
+  /**
+   * KaTeX 字体是否内联成 base64。
+   * 默认 true（下载的单文件网页必须能离线打开）；
+   * 应用内打 PDF 传 false —— 打印页与字体同源，直接按 URL 取，
+   * 生成的 HTML 会小两个数量级，导出明显更快。
+   */
+  inlineFonts?: boolean
 }
 
 function esc(s: string) {
@@ -46,7 +53,7 @@ export async function buildStandaloneHtml(markdown: string, opts: HtmlExportOpti
     figNumbering: settings.figNumbering,
     assetBase: opts.assetBase,
   })
-  const katex = await getInlinedKatexCss()
+  const katex = opts.inlineFonts === false ? getKatexCssWithFontUrls() : await getInlinedKatexCss()
   const date = new Date().toLocaleDateString('zh-CN')
   /** 把外观设置写成内联变量：导出的 HTML 与应用里看到的排版一致 */
   const exportFont = resolveExportStack(settings)

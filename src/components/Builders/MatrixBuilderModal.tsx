@@ -170,7 +170,7 @@ export default function MatrixBuilderModal({
                     onMouseEnter={() => undefined}
                     onClick={() => resize(i + 1, j + 1)}
                     className={`h-4 w-4 rounded-[3px] transition ${
-                      i < rows && j < cols ? 'bg-accent-500' : 'bg-white hover:bg-accent-200'
+                      i < rows && j < cols ? 'bg-accent-500' : 'bg-surface hover:bg-accent-200'
                     }`}
                   />
                 ))
@@ -265,14 +265,14 @@ export default function MatrixBuilderModal({
                     key={`${i}-${j}`}
                     value={cell}
                     onChange={(e) => setCell(i, j, e.target.value)}
-                    className="min-w-0 rounded-md border border-ink-200 bg-ink-50/40 px-1.5 py-1 text-center font-mono text-[12px] outline-none focus:border-accent-400 focus:bg-white focus:ring-2 focus:ring-accent-100"
+                    className="min-w-0 rounded-md border border-ink-200 bg-ink-50/40 px-1.5 py-1 text-center font-mono text-[12px] outline-none focus:border-accent-400 focus:bg-surface focus:ring-2 focus:ring-accent-100"
                   />
                 ))
               )}
             </div>
           </div>
 
-          <div className="rounded-xl border border-ink-200 bg-white">
+          <div className="rounded-xl border border-ink-200 bg-surface">
             <div className="border-b border-ink-100 px-3 py-1.5 text-[11px] font-medium text-ink-400">实时预览</div>
             <div
               className="flex min-h-[96px] items-center justify-center overflow-auto px-4 py-4"
@@ -280,7 +280,7 @@ export default function MatrixBuilderModal({
             />
           </div>
 
-          <div className="rounded-lg bg-ink-900 px-3 py-2 font-mono text-[11.5px] leading-relaxed text-ink-100">
+          <div className="rounded-lg bg-solid px-3 py-2 font-mono text-[11.5px] leading-relaxed text-white/85">
             <div className="mb-1 text-[10px] uppercase tracking-wide text-ink-400">LaTeX 源码</div>
             <pre className="whitespace-pre-wrap break-all">{latex}</pre>
           </div>

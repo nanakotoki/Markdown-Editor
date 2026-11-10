@@ -106,12 +106,20 @@ const ABS_SRC_RE = /^(?:[A-Za-z][A-Za-z0-9+.-]*:|\/\/|\/|#|\?)/
 /**
  * 把相对路径拼到资源前缀后面，顺手消掉 `.` 与 `..`。
  * 逐段 encodeURI：中文文件名、空格都能被浏览器正确取回，已编码的 `%20` 不会被二次编码。
+ *
+ * 前缀允许带协议与主机（`http://127.0.0.1:4321/ws/notes`）：
+ * 导出 PDF 时打印页是从本地服务取的一个地址，图片必须带回完整主机名，
+ * 否则会被当成 `/ws/…` 这种站点绝对路径，在打印窗口里解析到不存在的位置。
  */
 export function joinAssetPath(base: string, rel: string): string {
   const m = /^([^?#]*)([?#].*)?$/.exec(rel)
   const pathPart = m?.[1] ?? ''
   const tail = m?.[2] ?? ''
-  const segs = base.split('/').filter(Boolean)
+  // 拆出 `scheme://host` 这一段，剩下的才当作路径段来消 `.` 与 `..`
+  const originMatch = /^([A-Za-z][A-Za-z0-9+.-]*:\/\/[^/]+)(\/[\s\S]*)?$/.exec(base)
+  const origin = originMatch ? originMatch[1] : ''
+  const basePath = originMatch ? (originMatch[2] ?? '') : base
+  const segs = basePath.split('/').filter(Boolean)
   for (const part of pathPart.split('/')) {
     if (!part || part === '.') continue
     if (part === '..') {
@@ -120,7 +128,7 @@ export function joinAssetPath(base: string, rel: string): string {
     }
     segs.push(part)
   }
-  return '/' + segs.map((s) => encodeURI(s)).join('/') + tail
+  return origin + '/' + segs.map((s) => encodeURI(s)).join('/') + tail
 }
 
 /** `<div markdown="1">…</div>`：中间没有空行时，remark 会把整块当原始 HTML，

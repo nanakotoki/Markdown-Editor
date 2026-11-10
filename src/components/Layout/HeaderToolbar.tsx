@@ -17,8 +17,10 @@ import {
   LineChart,
   Link2,
   ListTree,
+  Moon,
   PanelLeft,
   PenTool,
+  Pin,
   Plus,
   Quote,
   Scissors,
@@ -26,13 +28,16 @@ import {
   Sigma,
   Sparkles,
   SquareFunction,
+  Sun,
+  SunMoon,
   Table2,
   TextCursorInput,
   Type,
 } from 'lucide-react'
 import { Button, IconButton, Segmented } from '../ui'
-import { useEditorStore, type ViewMode } from '../../store/useEditorStore'
+import { useEditorStore, type ThemeMode, type ViewMode } from '../../store/useEditorStore'
 import { editorBridge } from '../../store/editorBridge'
+import { desktop } from '../../core/desktop'
 
 export const ALGORITHM_TEMPLATE = `\`\`\`algorithm
 \\caption{算法名称}
@@ -101,8 +106,41 @@ export default function HeaderToolbar({
 
   const insert = (text: string, caretBack = 0) => editorBridge.current?.insert(text, caretBack)
 
+  /* ---- 窗口置顶：只在桌面壳里有这个能力，浏览器里不显示按钮 ---- */
+  const bridge = desktop()
+  const [onTop, setOnTop] = useState(false)
+  useEffect(() => {
+    if (!bridge) return
+    let alive = true
+    void bridge
+      .getWindowState()
+      .then((s) => alive && setOnTop(!!s.alwaysOnTop))
+      .catch(() => {})
+    // 菜单里勾了「始终置顶」，按钮状态要跟着走
+    const off = bridge.onWindowChanged((s) => setOnTop(!!s.alwaysOnTop))
+    return () => {
+      alive = false
+      off()
+    }
+  }, [bridge])
+
+  const toggleTop = async () => {
+    if (!bridge) return
+    const r = await bridge.setAlwaysOnTop(!onTop)
+    setOnTop(!!r.alwaysOnTop)
+  }
+
+  /** 主题三态轮换：浅色 → 深色 → 跟随系统 */
+  const cycleTheme = () => {
+    const order: ThemeMode[] = ['light', 'dark', 'system']
+    const next = order[(order.indexOf(settings.theme ?? 'system') + 1) % order.length]
+    updateSettings({ theme: next })
+  }
+  const themeLabel =
+    settings.theme === 'dark' ? '深色' : settings.theme === 'light' ? '浅色' : '跟随系统'
+
   return (
-    <header className="mf-no-print flex h-14 shrink-0 items-center gap-2 border-b border-ink-200 bg-white px-3">
+    <header className="mf-no-print flex h-14 shrink-0 items-center gap-2 border-b border-ink-200 bg-surface px-3">
       <div className="flex items-center gap-2 pl-1 pr-2">
         <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-accent-500 to-accent-700 text-white shadow-sm">
           <Sigma size={17} strokeWidth={2.4} />
@@ -259,6 +297,28 @@ export default function HeaderToolbar({
         <HelpCircle size={14} />
       </Button>
 
+      {bridge && (
+        <button
+          onClick={toggleTop}
+          title={onTop ? '已置顶：窗口浮在其他窗口之上（点击取消）' : '窗口置顶：让它一直浮在其他窗口上面'}
+          className={`inline-flex h-8 w-8 items-center justify-center rounded-lg transition ${
+            onTop
+              ? 'bg-accent-50 text-accent-700 ring-1 ring-accent-200'
+              : 'text-ink-500 hover:bg-ink-100 hover:text-ink-700'
+          }`}
+        >
+          <Pin size={14} className={onTop ? '' : 'rotate-45'} />
+        </button>
+      )}
+
+      <button
+        onClick={cycleTheme}
+        title={`界面主题：${themeLabel}（点击切换 浅色 → 深色 → 跟随系统）`}
+        className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-ink-500 transition hover:bg-ink-100 hover:text-ink-700"
+      >
+        {settings.theme === 'dark' ? <Moon size={14} /> : settings.theme === 'light' ? <Sun size={14} /> : <SunMoon size={14} />}
+      </button>
+
       <Button variant="primary" onClick={onExport}>
         <Download size={14} />
         导出
@@ -303,7 +363,7 @@ export function Menu({
       </button>
       {open && (
         <div
-          className={`absolute top-9 z-40 w-56 overflow-hidden rounded-xl border border-ink-200 bg-white py-1 shadow-panel ${
+          className={`absolute top-9 z-40 w-56 overflow-hidden rounded-xl border border-ink-200 bg-surface py-1 shadow-panel ${
             align === 'right' ? 'right-0' : 'left-0'
           }`}
         >

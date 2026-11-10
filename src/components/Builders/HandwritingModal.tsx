@@ -140,13 +140,13 @@ export default function HandwritingModal({ open, onClose }: { open: boolean; onC
       }
     >
       <div className="space-y-3">
-        <div className="relative overflow-hidden rounded-xl border border-ink-200 bg-white">
+        <div className="relative overflow-hidden rounded-xl border border-ink-200 bg-surface">
           {pastedImage ? (
             <div className="relative">
               <img src={pastedImage} alt="clipboard" className="max-h-[280px] w-full object-contain p-3" />
               <button
                 onClick={() => setPastedImage(null)}
-                className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-md bg-white/90 px-2 py-1 text-[11px] text-ink-600 shadow-sm ring-1 ring-ink-200 hover:text-rose-600"
+                className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-md bg-surface/90 px-2 py-1 text-[11px] text-ink-600 shadow-sm ring-1 ring-ink-200 hover:text-rose-600"
               >
                 <RotateCcw size={11} /> 回到手写板
               </button>
@@ -204,7 +204,7 @@ export default function HandwritingModal({ open, onClose }: { open: boolean; onC
         </Field>
 
         {preview && (
-          <div className="rounded-xl border border-ink-200 bg-white px-4 py-4">
+          <div className="rounded-xl border border-ink-200 bg-surface px-4 py-4">
             <div className="mb-1 text-[11px] text-ink-400">实时预览</div>
             <div className="overflow-auto" dangerouslySetInnerHTML={{ __html: preview.html }} />
           </div>

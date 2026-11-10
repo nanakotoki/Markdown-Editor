@@ -33,20 +33,25 @@ export interface MathFlowEditorProps {
 }
 
 const mfHighlight = HighlightStyle.define([
-  { tag: t.heading1, fontSize: '1.6em', fontWeight: '700', color: '#141a23', lineHeight: '1.5' },
-  { tag: t.heading2, fontSize: '1.32em', fontWeight: '700', color: '#1f2733', lineHeight: '1.5' },
-  { tag: t.heading3, fontSize: '1.14em', fontWeight: '700', color: '#1f2733' },
-  { tag: t.heading4, fontWeight: '700', color: '#2f3846' },
-  { tag: t.strong, fontWeight: '700', color: '#141a23' },
+  { tag: t.heading1, fontSize: '1.6em', fontWeight: '700', color: 'rgb(var(--c-ink-900))', lineHeight: '1.5' },
+  { tag: t.heading2, fontSize: '1.32em', fontWeight: '700', color: 'rgb(var(--c-ink-900))', lineHeight: '1.5' },
+  { tag: t.heading3, fontSize: '1.14em', fontWeight: '700', color: 'rgb(var(--c-ink-900))' },
+  { tag: t.heading4, fontWeight: '700', color: 'rgb(var(--c-ink-800))' },
+  { tag: t.strong, fontWeight: '700', color: 'rgb(var(--c-ink-900))' },
   { tag: t.emphasis, fontStyle: 'italic' },
-  { tag: t.link, color: '#2a55d4', textDecoration: 'underline' },
-  { tag: t.url, color: '#5d8bfa' },
-  { tag: t.monospace, fontFamily: 'var(--mf-mono)', background: '#eef0f4', color: '#b4491f' },
-  { tag: t.quote, color: '#5d6779', fontStyle: 'italic' },
-  { tag: t.list, color: '#3b6ef0' },
-  { tag: t.meta, color: '#8e97a8' },
-  { tag: t.keyword, color: '#2a55d4' },
-  { tag: t.comment, color: '#8e97a8' },
+  { tag: t.link, color: 'rgb(var(--c-accent-600))', textDecoration: 'underline' },
+  { tag: t.url, color: 'rgb(var(--c-accent-400))' },
+  {
+    tag: t.monospace,
+    fontFamily: 'var(--mf-mono)',
+    background: 'rgb(var(--c-ink-100))',
+    color: 'rgb(var(--c-warm))',
+  },
+  { tag: t.quote, color: 'rgb(var(--c-ink-500))', fontStyle: 'italic' },
+  { tag: t.list, color: 'rgb(var(--c-accent-500))' },
+  { tag: t.meta, color: 'rgb(var(--c-ink-400))' },
+  { tag: t.keyword, color: 'rgb(var(--c-accent-600))' },
+  { tag: t.comment, color: 'rgb(var(--c-ink-400))' },
 ])
 
 /** 行号夹取到文档范围（预览里点到的行号可能比当前文档还大） */
@@ -63,7 +68,13 @@ function contentOffset(view: EditorView): number {
 
 const mfTheme = EditorView.theme(
   {
-    '&': { height: '100%', fontSize: 'var(--mf-editor-size, 15px)', color: '#1f2733', background: 'transparent' },
+    /* 颜色全部走 CSS 变量：深浅两套皮肤只换变量，这里一个字都不用改 */
+    '&': {
+      height: '100%',
+      fontSize: 'var(--mf-editor-size, 15px)',
+      color: 'rgb(var(--c-ink-900))',
+      background: 'transparent',
+    },
     '&.cm-focused': { outline: 'none' },
     '.cm-scroller': {
       fontFamily: 'var(--mf-editor-font)',
@@ -71,22 +82,27 @@ const mfTheme = EditorView.theme(
       padding: '26px 44px 140px',
       overflow: 'auto',
     },
-    '.cm-content': { maxWidth: '840px', margin: '0 auto', caretColor: '#2a55d4' },
+    '.cm-content': { maxWidth: '840px', margin: '0 auto', caretColor: 'rgb(var(--c-accent-500))' },
     '.cm-line': { padding: '0 2px' },
-    '.cm-selectionBackground, ::selection': { background: '#dbe6ff !important' },
-    '.cm-cursor': { borderLeftWidth: '2px', borderLeftColor: '#2a55d4' },
-    '.cm-activeLine': { background: 'rgba(59,110,240,0.028)' },
+    '.cm-selectionBackground, ::selection': { background: 'rgb(var(--c-accent-100)) !important' },
+    '.cm-cursor': { borderLeftWidth: '2px', borderLeftColor: 'rgb(var(--c-accent-500))' },
+    '.cm-activeLine': { background: 'rgb(var(--c-accent-500) / 0.045)' },
     '.cm-tooltip': {
-      border: '1px solid #dfe3ea',
+      border: '1px solid rgb(var(--c-ink-200))',
       borderRadius: '10px',
-      boxShadow: '0 12px 30px -12px rgba(20,26,35,.25)',
+      boxShadow: '0 12px 30px -12px rgb(var(--c-shadow) / 0.25)',
       overflow: 'hidden',
+      background: 'rgb(var(--c-surface))',
+      color: 'rgb(var(--c-ink-800))',
     },
     '.cm-tooltip-autocomplete > ul': { fontFamily: 'var(--mf-sans)', fontSize: '13px', maxHeight: '300px' },
     '.cm-tooltip-autocomplete > ul > li': { padding: '4px 10px' },
-    '.cm-tooltip-autocomplete > ul > li[aria-selected]': { background: '#eef4ff', color: '#223d87' },
-    '.cm-completionDetail': { color: '#8e97a8', fontStyle: 'normal', marginLeft: '8px', fontSize: '11px' },
-    '.cm-snippet-hint': { color: '#8e97a8' },
+    '.cm-tooltip-autocomplete > ul > li[aria-selected]': {
+      background: 'rgb(var(--c-accent-100))',
+      color: 'rgb(var(--c-accent-700))',
+    },
+    '.cm-completionDetail': { color: 'rgb(var(--c-ink-400))', fontStyle: 'normal', marginLeft: '8px', fontSize: '11px' },
+    '.cm-snippet-hint': { color: 'rgb(var(--c-ink-400))' },
   },
   { dark: false }
 )

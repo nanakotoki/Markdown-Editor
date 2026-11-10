@@ -161,7 +161,7 @@ export default function TruthTableModal({ open, onClose }: { open: boolean; onCl
                   ]}
                 />
               </div>
-              <pre className="max-h-[180px] overflow-auto rounded-lg bg-ink-900 px-3 py-2 font-mono text-[11.5px] leading-relaxed text-ink-100">
+              <pre className="max-h-[180px] overflow-auto rounded-lg bg-solid px-3 py-2 font-mono text-[11.5px] leading-relaxed text-white/85">
                 {output}
               </pre>
             </div>

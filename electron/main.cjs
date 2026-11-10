@@ -186,43 +186,74 @@ function resolveOutDir(dirHint) {
   return abs
 }
 
-async function askSavePath(payload) {
-  const dir = resolveOutDir(payload?.dirHint)
-  const options = {
-    title: '导出 PDF',
-    defaultPath: path.join(dir, safeFileName(payload?.defaultName)),
-    filters: [{ name: 'PDF 文档', extensions: ['pdf'] }],
-    properties: ['createDirectory', 'showOverwriteConfirmation'],
+/**
+ * 不覆盖同名文件：`导数笔记.pdf` 已存在就写 `导数笔记 (2).pdf`。
+ * 用户要的是「按一下就出文件」，所以这里不做任何询问，直接让路。
+ */
+function uniquePath(dir, name) {
+  const first = path.join(dir, name)
+  if (!fs.existsSync(first)) return first
+  const ext = path.extname(name)
+  const stem = name.slice(0, name.length - ext.length)
+  for (let i = 2; i < 1000; i++) {
+    const next = path.join(dir, `${stem} (${i})${ext}`)
+    if (!fs.existsSync(next)) return next
   }
-  const picked = win ? await dialog.showSaveDialog(win, options) : await dialog.showSaveDialog(options)
-  return picked.canceled || !picked.filePath ? null : picked.filePath
+  return path.join(dir, `${stem}-${Date.now()}${ext}`)
+}
+
+/**
+ * 打印用的 HTML 放在工作区里的隐藏目录，再用本地服务的地址打开它。
+ * 这样页面和图片、KaTeX 字体全部同源：字体不带 CORS 麻烦，
+ * 相对路径的插图也不用内联成 base64（那会把 HTML 撑到几 MB，Chromium 解析很久）。
+ * 打印完就把临时文件删掉，工作区里不留痕迹。
+ */
+async function preparePrintPage(html) {
+  const dir = currentRoot ? path.join(currentRoot, '.mathflow-print') : ''
+  if (dir) {
+    await fsp.mkdir(dir, { recursive: true })
+    const name = `print-${process.pid}-${Date.now()}.html`
+    await fsp.writeFile(path.join(dir, name), html, 'utf8')
+    return {
+      url: `http://127.0.0.1:${serverPort}/ws/.mathflow-print/${name}`,
+      cleanup: async () => {
+        await fsp.rm(path.join(dir, name), { force: true }).catch(() => {})
+        await fsp.rmdir(dir).catch(() => {}) // 目录非空（并发导出）时忽略
+      },
+    }
+  }
+  // 没有工作区（极少见）：退回临时文件
+  const tmp = path.join(app.getPath('temp'), `mathflow-print-${process.pid}-${Date.now()}.html`)
+  await fsp.writeFile(tmp, html, 'utf8')
+  return { url: pathToFileURL(tmp).href, cleanup: () => fsp.rm(tmp, { force: true }).catch(() => {}) }
 }
 
 ipcMain.handle('mf:export-pdf', async (_event, payload = {}) => {
   let page = null
-  let tmp = ''
+  let cleanup = null
   try {
     if (typeof payload.html !== 'string' || !payload.html.trim()) {
       return { ok: false, error: '没有可导出的内容' }
     }
-    const target = await askSavePath(payload)
-    if (!target) return { ok: false, canceled: true }
+    const dir = resolveOutDir(payload?.dirHint)
+    await fsp.mkdir(dir, { recursive: true }).catch(() => {})
+    const target = uniquePath(dir, safeFileName(payload?.defaultName))
 
-    // 自包含 HTML 里有内联字体，走临时文件比 data: URL 稳（后者有长度上限）
-    tmp = path.join(app.getPath('temp'), `mathflow-print-${process.pid}-${Date.now()}.html`)
-    await fsp.writeFile(tmp, payload.html, 'utf8')
+    const started = Date.now()
+    const prepared = await preparePrintPage(payload.html)
+    cleanup = prepared.cleanup
 
     page = new BrowserWindow({
       show: false,
       backgroundColor: '#ffffff',
       webPreferences: { offscreen: false, javascript: true, contextIsolation: true, sandbox: true },
     })
-    await page.loadFile(tmp)
+    await page.loadURL(prepared.url)
     await page.webContents.executeJavaScript(BEFORE_PRINT, true).catch(() => {})
     const pdf = await page.webContents.printToPDF(PRINT_OPTS)
     await fsp.writeFile(target, pdf)
-    shell.showItemInFolder(target)
-    return { ok: true, filePath: target, bytes: pdf.length }
+    if (payload?.reveal !== false) shell.showItemInFolder(target)
+    return { ok: true, filePath: target, bytes: pdf.length, ms: Date.now() - started }
   } catch (err) {
     return { ok: false, error: String(err?.message ?? err) }
   } finally {
@@ -231,23 +262,58 @@ ipcMain.handle('mf:export-pdf', async (_event, payload = {}) => {
     } catch {
       /* 窗口可能已经自己关了 */
     }
-    if (tmp) fsp.rm(tmp, { force: true }).catch(() => {})
+    if (cleanup) await cleanup().catch(() => {})
   }
 })
 
 ipcMain.handle('mf:print-current', async (_event, payload = {}) => {
   try {
     if (!win) return { ok: false, error: '窗口已关闭' }
-    const target = await askSavePath(payload)
-    if (!target) return { ok: false, canceled: true }
+    const dir = resolveOutDir(payload?.dirHint)
+    await fsp.mkdir(dir, { recursive: true }).catch(() => {})
+    const target = uniquePath(dir, safeFileName(payload?.defaultName))
+    const started = Date.now()
     const pdf = await win.webContents.printToPDF(PRINT_OPTS)
     await fsp.writeFile(target, pdf)
-    shell.showItemInFolder(target)
-    return { ok: true, filePath: target, bytes: pdf.length }
+    if (payload?.reveal !== false) shell.showItemInFolder(target)
+    return { ok: true, filePath: target, bytes: pdf.length, ms: Date.now() - started }
   } catch (err) {
     return { ok: false, error: String(err?.message ?? err) }
   }
 })
+
+/** 打开导出文件所在的文件夹（前端 toast 上点一下就能定位） */
+ipcMain.handle('mf:reveal', async (_event, filePath) => {
+  if (typeof filePath === 'string' && filePath && fs.existsSync(filePath)) {
+    shell.showItemInFolder(filePath)
+    return { ok: true }
+  }
+  return { ok: false }
+})
+
+/* ------------------------------------------------------------------ */
+/* 窗口控制：置顶 / 状态                                               */
+/* ------------------------------------------------------------------ */
+
+function applyAlwaysOnTop(flag) {
+  if (!win) return false
+  // floating：比普通窗口高一层，又不会盖住任务栏与系统弹窗
+  win.setAlwaysOnTop(!!flag, 'floating')
+  return win.isAlwaysOnTop()
+}
+
+ipcMain.handle('mf:set-always-on-top', (_event, flag) => {
+  const next = applyAlwaysOnTop(!!flag)
+  writeConfig({ alwaysOnTop: next })
+  return { ok: true, alwaysOnTop: next }
+})
+
+ipcMain.handle('mf:get-window-state', () => ({
+  ok: true,
+  alwaysOnTop: win ? win.isAlwaysOnTop() : false,
+  maximized: win ? win.isMaximized() : false,
+  desktop: true,
+}))
 
 /* ------------------------------------------------------------------ */
 /* 窗口                                                                */
@@ -272,6 +338,9 @@ function createWindow() {
   })
 
   win.once('ready-to-show', () => win.show())
+
+  // 上次退出时是置顶状态，这次接着置顶
+  if (readConfig().alwaysOnTop) applyAlwaysOnTop(true)
 
   // 站内跳转放行，外链交给系统浏览器
   win.webContents.setWindowOpenHandler(({ url }) => {
@@ -405,6 +474,31 @@ function buildMenu() {
         { type: 'separator' },
         { role: 'togglefullscreen', label: '全屏' },
         { role: 'toggleDevTools', label: '开发者工具' },
+      ],
+    },
+    {
+      label: '窗口',
+      submenu: [
+        {
+          label: '始终置顶',
+          type: 'checkbox',
+          checked: !!win?.isAlwaysOnTop(),
+          accelerator: 'CmdOrCtrl+Shift+P',
+          click: (item) => {
+            const next = applyAlwaysOnTop(item.checked)
+            writeConfig({ alwaysOnTop: next })
+            // 让界面上的图钉按钮跟着变，别出现「菜单说置顶、按钮没亮」
+            win?.webContents.send('mf:window-changed', { alwaysOnTop: next })
+          },
+        },
+        {
+          label: '隐藏 / 显示侧边栏',
+          accelerator: 'CmdOrCtrl+B',
+          click: () => win?.webContents.send('mf:command', 'toggle-sidebar'),
+        },
+        { type: 'separator' },
+        { role: 'minimize', label: '最小化' },
+        { role: 'togglefullscreen', label: '全屏' },
       ],
     },
     {

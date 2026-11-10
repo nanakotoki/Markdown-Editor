@@ -31,8 +31,7 @@ function blobToDataUrl(blob: Blob): Promise<string> {
 }
 
 /** 把 KaTeX CSS 中的字体路径替换成 base64，得到可离线、可进 SVG 的样式 */
-export async function getInlinedKatexCss(): Promise<string> {
-  if (inlinedCssCache) return inlinedCssCache
+export async function getInlinedKatexCss(): Promise<string> {  if (inlinedCssCache) return inlinedCssCache
   let css = katexCss
   const entries = Object.entries(fontUrls)
   if (!entries.length) {
@@ -53,6 +52,27 @@ export async function getInlinedKatexCss(): Promise<string> {
     }
   }
   inlinedCssCache = css
+  return css
+}
+
+/**
+ * KaTeX 样式的「轻量版」：字体只换成 URL，不内联成 base64。
+ *
+ * 给应用内打印 PDF 用 —— 打印页是从本地服务（http://127.0.0.1:端口）取的，
+ * 和字体文件同源，浏览器直接按需下载即可。相比把二十个字体全塞进 base64，
+ * 这份 CSS 小了两个数量级，Chromium 解析和排版都快得多。
+ * 下载给别人看的单文件网页仍走上面的 getInlinedKatexCss（必须能离线打开）。
+ */
+export function getKatexCssWithFontUrls(): string {
+  let css = katexCss
+  const entries = Object.entries(fontUrls)
+  if (!entries.length) return css
+  for (const [path, url] of entries) {
+    const name = path.split('/').pop()
+    if (!name) continue
+    // url 是 Vite 产出的 `/assets/KaTeX_xxx.woff2`；打印页同源，直接用即可
+    css = css.split(`fonts/${name}`).join(url)
+  }
   return css
 }
 

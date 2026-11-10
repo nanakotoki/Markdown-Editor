@@ -297,38 +297,54 @@ export default function AcademicPreview({
     holder.querySelectorAll('details').forEach((d) => ((d as HTMLDetailsElement).open = true))
     document.body.appendChild(holder)
     document.body.classList.add('mf-printing')
+    let done = false
     const cleanup = () => {
+      if (done) return
+      done = true
       document.body.classList.remove('mf-printing')
       holder.remove()
     }
+    // 兜底：万一渲染一直不返回，界面不能一直停在被隐藏的状态
+    const watchdog = window.setTimeout(cleanup, 15000)
 
     const bridge = desktop()
     if (bridge) {
       const dirHint = docPath ? docPath.split('/').slice(0, -1).join('/') : ''
-      // 等两帧：样式先落到纸面上，再让 Chromium 去渲染 PDF
-      requestAnimationFrame(() =>
-        requestAnimationFrame(async () => {
-          try {
-            const res = await bridge.printCurrent({
-              defaultName: `${docTitle || 'MathFlow 文档'}.pdf`,
-              dirHint,
-            })
-            const toast = useEditorStore.getState().showToast
-            if (res.canceled) return
-            toast(res.ok ? `已导出 PDF：${res.filePath}` : (res.error ?? '导出失败'), res.ok ? 'success' : 'warn')
-          } catch (e: any) {
-            useEditorStore.getState().showToast(e?.message ?? '导出失败', 'warn')
-          } finally {
-            cleanup()
+      /*
+       * 用定时器而不是 requestAnimationFrame 等布局落地：
+       * 窗口在后台或最小化时 Chromium 会把 rAF 完全停掉（不是变慢，是不执行），
+       * 于是「点了导出没反应、界面还白着」——这里改成 60ms 的定时器，
+       * 后台被节流到 1 秒也一定会跑。
+       */
+      window.setTimeout(async () => {
+        try {
+          const res = await bridge.printCurrent({
+            defaultName: `${docTitle || 'MathFlow 文档'}.pdf`,
+            dirHint,
+          })
+          const toast = useEditorStore.getState().showToast
+          if (res.ok) {
+            const sec = res.ms ? `，用时 ${(res.ms / 1000).toFixed(1)} 秒` : ''
+            toast(`已导出：${res.filePath}${sec}`, 'success')
+          } else {
+            toast(res.error ?? '导出失败', 'warn')
           }
-        })
-      )
+        } catch (e: any) {
+          useEditorStore.getState().showToast(e?.message ?? '导出失败', 'warn')
+        } finally {
+          window.clearTimeout(watchdog)
+          cleanup()
+        }
+      }, 60)
       return
     }
 
     window.addEventListener('afterprint', cleanup, { once: true })
     window.print()
-    setTimeout(cleanup, 120)
+    window.setTimeout(() => {
+      window.clearTimeout(watchdog)
+      cleanup()
+    }, 400)
   }
 
   return (
@@ -344,7 +360,7 @@ export default function AcademicPreview({
               <span>A4 · 共 {pageTotal || 1} 页</span>
               <span className="text-ink-300">·</span>
               <span>
-                虚线处为手动分页（源码里写 <code className="rounded bg-white/70 px-1 py-0.5 font-mono text-[11px]">{'\\newpage'}</code>）
+                虚线处为手动分页（源码里写 <code className="rounded bg-surface/70 px-1 py-0.5 font-mono text-[11px]">{'\\newpage'}</code>）
               </span>
               <button className="mf-read-print" onClick={printAsPdf} title="按当前分页导出 PDF（桌面版直接出文件）">
                 {desktop() ? '导出 PDF' : '打印 / 存为 PDF'}
@@ -366,7 +382,7 @@ export default function AcademicPreview({
       )}
       {hover && (
         <div
-          className="pointer-events-none absolute z-30 w-[380px] rounded-xl border border-ink-200 bg-white p-3 shadow-panel"
+          className="pointer-events-none absolute z-30 w-[380px] rounded-xl border border-ink-200 bg-surface p-3 shadow-panel"
           style={{ left: hover.x, top: hover.y }}
         >
           <div className="mb-1 flex items-baseline gap-2">

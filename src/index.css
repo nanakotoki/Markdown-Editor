@@ -2,6 +2,103 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ==========================================================================
+   界面配色（深色模式的全部机关都在这里）
+   --------------------------------------------------------------------------
+   Tailwind 的 ink / accent / white 都映射到下面这些变量。
+   深色不是逐条改类名，而是把 ink 的明暗整条倒过来：
+   ink-50 在浅色下是最浅的底，深色下就成了最深的底；ink-900 反之。
+   于是所有 `bg-ink-50` / `text-ink-700` / `border-ink-200` 自动成立。
+   论文纸面（.mf-page / .mf-sheet）不吃这套变量 —— 纸永远是白的，
+   否则屏幕上排好的版和打印出来对不上。
+   ========================================================================== */
+
+:root {
+  --c-surface: 255 255 255;
+  --c-solid: 20 26 35;
+  --c-canvas: 243 245 248;
+  --c-paper: 255 255 255;
+  --c-shadow: 20 26 35;
+
+  --c-ink-50: 247 248 250;
+  --c-ink-100: 238 240 244;
+  --c-ink-200: 223 227 234;
+  --c-ink-300: 198 204 216;
+  --c-ink-400: 142 151 168;
+  --c-ink-500: 93 103 121;
+  --c-ink-600: 65 75 92;
+  --c-ink-700: 47 56 70;
+  --c-ink-800: 31 39 51;
+  --c-ink-900: 20 26 35;
+
+  --c-accent-50: 238 244 255;
+  --c-accent-100: 219 230 255;
+  --c-accent-200: 190 210 255;
+  --c-accent-300: 145 180 255;
+  --c-accent-400: 93 139 250;
+  --c-accent-500: 59 110 240;
+  --c-accent-600: 42 85 212;
+  --c-accent-700: 35 68 171;
+  --c-accent-800: 34 61 135;
+  --c-accent-900: 31 53 107;
+
+  /* 界面专用的几个零散颜色：滚动条、悬浮态、提示条 */
+  --c-scroll-thumb: 211 217 227;
+  --c-scroll-thumb-hover: 183 192 206;
+  --c-hover: 238 244 255;
+  /* 行内代码、TeX 命令这类「暖色」点缀 */
+  --c-warm: 180 73 31;
+  --c-warm-ink: 107 74 18;
+  --c-warm-bg: 253 246 231;
+  --c-tex: 124 58 237;
+  --c-tex-num: 180 83 9;
+  --c-danger: 220 38 38;
+}
+
+html.dark {
+  color-scheme: dark;
+
+  --c-surface: 27 34 45;
+  --c-solid: 10 14 20;
+  --c-canvas: 15 20 27;
+  --c-paper: 255 255 255;
+  --c-shadow: 0 0 0;
+
+  /* 明暗倒序 */
+  --c-ink-50: 21 27 36;
+  --c-ink-100: 30 38 49;
+  --c-ink-200: 45 54 68;
+  --c-ink-300: 63 74 90;
+  --c-ink-400: 126 138 156;
+  --c-ink-500: 150 162 179;
+  --c-ink-600: 175 186 201;
+  --c-ink-700: 199 208 220;
+  --c-ink-800: 222 229 238;
+  --c-ink-900: 238 243 249;
+
+  /* 蓝在深底上要提亮，否则按钮糊成一团 */
+  --c-accent-50: 24 34 58;
+  --c-accent-100: 31 46 78;
+  --c-accent-200: 44 66 110;
+  --c-accent-300: 92 128 205;
+  --c-accent-400: 116 152 235;
+  --c-accent-500: 124 160 255;
+  --c-accent-600: 148 177 255;
+  --c-accent-700: 172 196 255;
+  --c-accent-800: 195 213 255;
+  --c-accent-900: 215 228 255;
+
+  --c-scroll-thumb: 58 68 84;
+  --c-scroll-thumb-hover: 78 90 110;
+  --c-hover: 36 46 62;
+  --c-warm: 236 152 108;
+  --c-warm-ink: 226 190 130;
+  --c-warm-bg: 62 48 26;
+  --c-tex: 192 160 255;
+  --c-tex-num: 245 190 100;
+  --c-danger: 248 113 113;
+}
+
 :root {
   /* 正文默认：西文 Times New Roman + 中文宋体。CSS 逐字回退，两段字体名就能混排 */
   --mf-serif: 'Times New Roman', 'Nimbus Roman No9 L', 'Liberation Serif', Times, 'Source Han Serif SC', 'Noto Serif CJK SC', 'Songti SC', 'STSong', 'SimSun', serif;
@@ -40,7 +137,7 @@ body {
   margin: 0;
   font-family: var(--mf-sans);
   color: var(--mf-ink);
-  background: #f3f5f8;
+  background: rgb(var(--c-canvas));
 }
 
 ::-webkit-scrollbar {
@@ -48,13 +145,13 @@ body {
   height: 9px;
 }
 ::-webkit-scrollbar-thumb {
-  background: #d3d9e3;
+  background: rgb(var(--c-scroll-thumb));
   border-radius: 8px;
   border: 2px solid transparent;
   background-clip: content-box;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #b7c0ce;
+  background: rgb(var(--c-scroll-thumb-hover));
   background-clip: content-box;
 }
 ::-webkit-scrollbar-track {
@@ -75,7 +172,7 @@ body {
   vertical-align: baseline;
 }
 .mf-cm-inline:hover {
-  background: #eef4ff;
+  background: rgb(var(--c-accent-100));
 }
 .mf-cm-block {
   display: block;
@@ -89,7 +186,7 @@ body {
   overflow-y: hidden;
 }
 .mf-cm-block:hover {
-  background: #f7f8fa;
+  background: rgb(var(--c-ink-50));
 }
 .mf-cm-inline .katex,
 .mf-cm-block .katex {
@@ -105,21 +202,21 @@ body {
   box-shadow: inset 0 0 0 1px rgba(59, 110, 240, 0.12);
 }
 .cm-tex-cmd {
-  color: #7c3aed;
+  color: rgb(var(--c-tex));
   font-weight: 500;
 }
 .cm-tex-num {
-  color: #b45309;
+  color: rgb(var(--c-tex-num));
 }
 .cm-tex-brace {
-  color: #94a3b8;
+  color: rgb(var(--c-ink-400));
 }
 .cm-directive-label {
   font-family: var(--mf-sans);
   font-size: 0.82em;
   letter-spacing: 0.02em;
-  color: #223d87;
-  background: #eef4ff;
+  color: rgb(var(--c-accent-700));
+  background: rgb(var(--c-accent-100));
   border-radius: 4px;
   padding: 1px 6px;
   font-weight: 600;
@@ -132,19 +229,19 @@ body {
   text-decoration: none !important;
 }
 .cm-math-error {
-  text-decoration: underline wavy #dc2626;
+  text-decoration: underline wavy rgb(var(--c-danger));
   text-underline-offset: 3px;
 }
 
 /* 容器标签的中文版：把 `::: theorem` 显示成「定理 1.1」 */
 .cm-directive-label-cn {
-  background: #e8f0ff;
-  color: #1d3a8a;
+  background: rgb(var(--c-accent-100));
+  color: rgb(var(--c-accent-700));
   cursor: text;
 }
 .cm-ref-chip-cn {
-  background: #eef4ff;
-  color: #1d4ed8;
+  background: rgb(var(--c-accent-100));
+  color: rgb(var(--c-accent-600));
   cursor: text;
 }
 /* 内联模式下的手动分页标记 */
@@ -152,16 +249,16 @@ body {
   position: relative;
   height: 18px;
   margin: 8px 0;
-  border-top: 1px dashed #b9c3d3;
+  border-top: 1px dashed rgb(var(--c-ink-300));
 }
 .cm-pagebreak > span {
   position: absolute;
   right: 4px;
   top: -8px;
   padding: 0 6px;
-  background: #fff;
+  background: rgb(var(--c-canvas));
   font: 600 10px var(--mf-sans);
-  color: #94a3b8;
+  color: rgb(var(--c-ink-400));
   letter-spacing: 0.08em;
 }
 
@@ -171,7 +268,7 @@ body {
   position: relative;
   height: 0;
   margin: 0;
-  border-top: 1px dashed #dbe1ea;
+  border-top: 1px dashed rgb(var(--c-ink-200));
   pointer-events: none;
 }
 .cm-autopage > span {
@@ -179,9 +276,9 @@ body {
   right: 2px;
   top: -9px;
   padding: 0 5px;
-  background: #fff;
+  background: rgb(var(--c-canvas));
   font: 500 9.5px var(--mf-sans);
-  color: #b6bfcd;
+  color: rgb(var(--c-ink-300));
   letter-spacing: 0.04em;
 }
 
@@ -202,12 +299,12 @@ body {
 .cm-block-widget .mf-table {
   width: 100%;
   border-collapse: collapse;
-  border-top: 2px solid #2f3846;
-  border-bottom: 2px solid #2f3846;
+  border-top: 2px solid rgb(var(--c-ink-800));
+  border-bottom: 2px solid rgb(var(--c-ink-800));
   font-size: 0.94em;
 }
 .cm-block-widget .mf-table thead th {
-  border-bottom: 1px solid #2f3846;
+  border-bottom: 1px solid rgb(var(--c-ink-800));
   padding: 7px 10px;
   font-weight: 700;
   text-align: left;
@@ -216,9 +313,9 @@ body {
   padding: 6px 10px;
 }
 .cm-block-widget .mf-link {
-  color: #2a55d4;
+  color: rgb(var(--c-accent-600));
   text-decoration: none;
-  border-bottom: 1px solid rgba(42, 85, 212, 0.35);
+  border-bottom: 1px solid rgb(var(--c-accent-600) / 0.35);
 }
 
 /* 编辑器里的交叉引用 / 文献引用：保留源码，但看起来像一个可点击的胶囊 */.cm-ref-chip,
@@ -226,16 +323,16 @@ body {
   font-family: var(--mf-sans);
   font-size: 0.86em;
   letter-spacing: 0.01em;
-  color: #223d87;
-  background: #eef4ff;
+  color: rgb(var(--c-accent-700));
+  background: rgb(var(--c-accent-100));
   border-radius: 4px;
   padding: 1px 5px;
   text-decoration: none !important;
   font-weight: 500;
 }
 .cm-cite-chip {
-  color: #6b4a12;
-  background: #fdf6e7;
+  color: rgb(var(--c-warm-ink));
+  background: rgb(var(--c-warm-bg));
 }
 
 /* Tailwind preflight 会把 img 置为 display:block / max-width:100%，
@@ -252,12 +349,12 @@ body {
 
 .mf-empty-math::after {
   content: '空公式';
-  color: #c6ccd8;
+  color: rgb(var(--c-ink-300));
   font-family: var(--mf-sans);
   font-size: 12px;
 }
 .mf-math-error {
-  color: #dc2626;
+  color: rgb(var(--c-danger));
   font-family: var(--mf-mono);
   font-size: 0.9em;
 }
@@ -1338,7 +1435,7 @@ body {
    ========================================================================== */
 
 .mf-read-scroll {
-  background: #eceff4;
+  background: rgb(var(--c-canvas));
 }
 .mf-read-toolbar {
   position: sticky;
@@ -1349,11 +1446,11 @@ body {
   justify-content: center;
   gap: 10px;
   padding: 8px;
-  background: rgba(236, 239, 244, 0.92);
+  background: rgb(var(--c-canvas) / 0.92);
   backdrop-filter: blur(6px);
   font-family: var(--mf-sans);
   font-size: 12px;
-  color: #64748b;
+  color: rgb(var(--c-ink-500));
 }
 .mf-sheet {
   position: relative;
@@ -1435,15 +1532,15 @@ body {
   margin-left: 6px;
   padding: 2px 10px;
   border-radius: 999px;
-  border: 1px solid #cbd5e1;
-  background: #fff;
+  border: 1px solid rgb(var(--c-ink-200));
+  background: rgb(var(--c-surface));
   font: 600 11.5px var(--mf-sans);
-  color: #475569;
+  color: rgb(var(--c-ink-600));
   cursor: pointer;
 }
 .mf-read-print:hover {
-  border-color: #94a3b8;
-  color: #1e293b;
+  border-color: rgb(var(--c-ink-400));
+  color: rgb(var(--c-ink-900));
 }
 
 @media print {
@@ -1492,4 +1589,196 @@ body {
   .mf-sheet .mf-academic .katex {
     font-size: 1.04em;
   }
+}
+
+/* ==========================================================================
+   深色模式的收尾：纸面阴影、选中色、分隔线
+   --------------------------------------------------------------------------
+   纸本身不参与主题（永远是白的），但白纸压在深底上时阴影要更沉一点，
+   否则边缘发虚、看不出纸张边界。
+   ========================================================================== */
+html.dark .mf-sheet {
+  box-shadow: 0 12px 34px -18px rgba(0, 0, 0, 0.85);
+}
+html.dark ::selection {
+  background: rgb(var(--c-accent-200) / 0.55);
+  color: rgb(var(--c-ink-900));
+}
+html.dark .mf-cm-inline:hover {
+  background: rgb(var(--c-hover));
+}
+html.dark .mf-cm-block:hover {
+  background: rgb(var(--c-ink-50));
+}
+
+/* ==========================================================================
+   深色模式的收尾：纸面阴影、选中色、分隔线
+   --------------------------------------------------------------------------
+   纸本身不参与主题（永远是白的），但白纸压在深底上时阴影要更沉一点，
+   否则边缘发虚、看不出纸张边界。
+   ========================================================================== */
+html.dark .mf-sheet {
+  box-shadow: 0 12px 34px -18px rgba(0, 0, 0, 0.85);
+}
+html.dark ::selection {
+  background: rgb(var(--c-accent-200) / 0.55);
+  color: rgb(var(--c-ink-900));
+}
+html.dark .mf-cm-inline:hover {
+  background: rgb(var(--c-hover));
+}
+html.dark .mf-cm-block:hover {
+  background: rgb(var(--c-ink-50));
+}
+
+/* --------------------------------------------------------------------------
+   深色下的几个语义色（成功 / 警告 / 危险）
+   Tailwind 的 rose-50、amber-50 这些是浅底色，暗底上会亮得像贴纸，
+   这里统一压成「暗底 + 亮字」。选择器前缀 html.dark 让它必定赢过工具类。
+   -------------------------------------------------------------------------- */
+html.dark .bg-rose-50 {
+  background-color: rgb(74 31 40);
+}
+html.dark .bg-rose-100 {
+  background-color: rgb(88 36 46);
+}
+html.dark .bg-emerald-50 {
+  background-color: rgb(18 58 48);
+}
+html.dark .bg-amber-50 {
+  background-color: rgb(61 47 20);
+}
+html.dark .bg-amber-100 {
+  background-color: rgb(76 58 24);
+}
+
+html.dark .text-rose-500 {
+  color: rgb(251 113 133);
+}
+html.dark .text-rose-600 {
+  color: rgb(253 164 175);
+}
+html.dark .text-rose-700 {
+  color: rgb(254 205 211);
+}
+html.dark .text-amber-500 {
+  color: rgb(251 191 36);
+}
+html.dark .text-amber-600 {
+  color: rgb(252 211 77);
+}
+html.dark .text-amber-700 {
+  color: rgb(253 230 138);
+}
+html.dark .text-emerald-500 {
+  color: rgb(52 211 153);
+}
+html.dark .text-emerald-600 {
+  color: rgb(110 231 183);
+}
+html.dark .text-emerald-700 {
+  color: rgb(167 243 208);
+}
+html.dark .text-emerald-800 {
+  color: rgb(209 250 229);
+}
+html.dark .text-violet-500 {
+  color: rgb(167 139 250);
+}
+
+html.dark .border-rose-100,
+html.dark .border-rose-200,
+html.dark .ring-rose-200 {
+  border-color: rgb(127 45 61);
+}
+html.dark .border-emerald-200,
+html.dark .ring-emerald-200 {
+  border-color: rgb(31 111 90);
+}
+html.dark .border-amber-100,
+html.dark .border-amber-200,
+html.dark .ring-amber-200 {
+  border-color: rgb(122 90 30);
+}
+
+/* --------------------------------------------------------------------------
+   深色下的几个语义色（成功 / 警告 / 危险）
+   Tailwind 的 rose-50、amber-50 这些是浅底色，暗底上会亮得像贴纸，
+   这里统一压成「暗底 + 亮字」。选择器前缀 html.dark 让它必定赢过工具类。
+   -------------------------------------------------------------------------- */
+html.dark .bg-rose-50 {
+  background-color: rgb(74 31 40);
+}
+html.dark .bg-rose-100 {
+  background-color: rgb(88 36 46);
+}
+html.dark .bg-emerald-50 {
+  background-color: rgb(18 58 48);
+}
+html.dark .bg-amber-50 {
+  background-color: rgb(61 47 20);
+}
+html.dark .bg-amber-100 {
+  background-color: rgb(76 58 24);
+}
+
+html.dark .text-rose-500 {
+  color: rgb(251 113 133);
+}
+html.dark .text-rose-600 {
+  color: rgb(253 164 175);
+}
+html.dark .text-rose-700 {
+  color: rgb(254 205 211);
+}
+html.dark .text-amber-500 {
+  color: rgb(251 191 36);
+}
+html.dark .text-amber-600 {
+  color: rgb(252 211 77);
+}
+html.dark .text-amber-700 {
+  color: rgb(253 230 138);
+}
+html.dark .text-emerald-500 {
+  color: rgb(52 211 153);
+}
+html.dark .text-emerald-600 {
+  color: rgb(110 231 183);
+}
+html.dark .text-emerald-700 {
+  color: rgb(167 243 208);
+}
+html.dark .text-emerald-800 {
+  color: rgb(209 250 229);
+}
+html.dark .text-violet-500 {
+  color: rgb(167 139 250);
+}
+
+html.dark .border-rose-100,
+html.dark .border-rose-200,
+html.dark .ring-rose-200 {
+  border-color: rgb(127 45 61);
+}
+html.dark .border-emerald-200,
+html.dark .ring-emerald-200 {
+  border-color: rgb(31 111 90);
+}
+html.dark .border-amber-100,
+html.dark .border-amber-200,
+html.dark .ring-amber-200 {
+  border-color: rgb(122 90 30);
+}
+
+/* 深色下 body 的默认文字色：--mf-ink 是「纸面上的墨色」，不能动，
+   否则白纸上的字也会跟着变白；所以这里单独给界面兜一层底。 */
+html.dark body {
+  color: rgb(var(--c-ink-800));
+}
+
+/* 深色下 body 的默认文字色：--mf-ink 是「纸面上的墨色」，不能动，
+   否则白纸上的字也会跟着变白；所以这里单独给界面兜一层底。 */
+html.dark body {
+  color: rgb(var(--c-ink-800));
 }

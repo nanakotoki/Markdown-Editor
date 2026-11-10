@@ -21,6 +21,8 @@ import { macrosToKatex } from './core/katexSafeRender'
 import { renderMarkdown, type RenderResult } from './core/renderMarkdown'
 import { SNIPPET_CHEATSHEET } from './core/snippetRules'
 import { applyAppearance } from './core/appearance'
+import { applyTheme, watchSystemTheme } from './core/theme'
+import { desktop } from './core/desktop'
 import { collectAnchors, flashLine, indexAnchors, lineToY, yToLine, type Anchor, type AnchorIndex } from './core/scrollSync'
 import { editorBridge } from './store/editorBridge'
 
@@ -79,6 +81,35 @@ export default function App() {
       const s = useEditorStore.getState()
       s.openModal('export')
       s.showToast('打印请走这里：导出可打印的 HTML，再在新窗口按 Ctrl+P', 'info')
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
+  /* ---------------- 界面主题：浅色 / 深色 / 跟随系统 ---------------- */
+  useEffect(() => {
+    applyTheme(settings.theme)
+    if (settings.theme !== 'system') return
+    // 跟随系统时，用户在系统设置里切换要立刻反映过来，不用重启应用
+    return watchSystemTheme(() => applyTheme('system'))
+  }, [settings.theme])
+
+  /* ---------------- 菜单发来的指令（隐藏侧边栏等） ---------------- */
+  useEffect(() => {
+    const bridge = desktop()
+    if (!bridge) return
+    return bridge.onCommand((cmd) => {
+      if (cmd === 'toggle-sidebar') useEditorStore.getState().toggleSidebar()
+    })
+  }, [])
+
+  /* ---------------- Ctrl+B：收起 / 展开侧边栏 ---------------- */
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey) return
+      if (e.key.toLowerCase() !== 'b') return
+      e.preventDefault()
+      useEditorStore.getState().toggleSidebar()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -308,7 +339,7 @@ export default function App() {
   /* ---------------- 空工作区 ---------------- */
   if (!doc) {
     return (
-      <div className="flex h-screen flex-col overflow-hidden bg-[#f3f5f8]">
+      <div className="flex h-screen flex-col overflow-hidden bg-canvas">
         <HeaderToolbar
           onExport={() => openModal('export')}
           onRequestBuilder={requestBuilder}
@@ -385,7 +416,7 @@ export default function App() {
   )
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-[#f3f5f8]">
+    <div className="flex h-screen flex-col overflow-hidden bg-canvas">
       <HeaderToolbar
         onExport={() => openModal('export')}
         onRequestBuilder={requestBuilder}
@@ -396,11 +427,11 @@ export default function App() {
       <div className="flex min-h-0 flex-1">
         {sidebarOpen && <SidebarDocTree toc={analysis.toc} onJump={jumpInPreview} />}
 
-        <main className="relative flex min-w-0 flex-1 overflow-hidden bg-white">
+        <main className="relative flex min-w-0 flex-1 overflow-hidden bg-surface">
           {viewMode === 'split' ? (
             <div className="flex w-full">
-              <div className="relative w-1/2 border-r border-ink-200 bg-white">{editorPane}</div>
-              <div ref={previewRef} className="relative w-1/2 overflow-auto bg-[#fbfcfd]">
+              <div className="relative w-1/2 border-r border-ink-200 bg-surface">{editorPane}</div>
+              <div ref={previewRef} className="relative w-1/2 overflow-auto bg-white">
                 {previewPane}
               </div>
             </div>
@@ -410,7 +441,7 @@ export default function App() {
             </div>
           ) : (
             <div ref={previewRef} className="relative flex w-full justify-center overflow-auto">
-              <div className="w-full max-w-[980px] bg-white">{editorPane}</div>
+              <div className="w-full max-w-[980px] bg-surface">{editorPane}</div>
             </div>
           )}
         </main>
@@ -429,9 +460,9 @@ export default function App() {
 function Splash() {
   const mode = useEditorStore((s) => s.mode)
   return (
-    <div className="flex h-screen items-center justify-center bg-[#f3f5f8]">
+    <div className="flex h-screen items-center justify-center bg-canvas">
       <div className="flex flex-col items-center gap-3">
-        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-ink-900 text-white shadow-panel">
+        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-solid text-white shadow-panel">
           <span className="font-serif text-[19px] italic leading-none">Mf</span>
         </div>
         <div className="flex items-center gap-2 text-[12.5px] text-ink-500">
@@ -460,7 +491,7 @@ function EmptyWorkspace({
   onCreate: () => void
 }) {
   return (
-    <div className="flex flex-1 items-center justify-center bg-white">
+    <div className="flex flex-1 items-center justify-center bg-surface">
       <div className="max-w-[420px] px-8 text-center">
         <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-ink-50 text-ink-400">
           <FolderOpen size={22} />
@@ -544,8 +575,8 @@ function Modals({
           ))}
         </div>
         <div className="mt-4 rounded-lg bg-ink-50 px-3 py-2 text-[11.5px] leading-relaxed text-ink-500">
-          提示：输入 <code className="rounded bg-white px-1">@</code> 触发全文交叉引用联想；<code className="rounded bg-white px-1">[@</code> 联想文献；
-          <code className="mx-1 rounded bg-white px-1">?</code> 在公式内呼出 AI；<code className="rounded bg-white px-1">Ctrl/Cmd + K</code> 在任意位置呼出 AI。
+          提示：输入 <code className="rounded bg-surface px-1">@</code> 触发全文交叉引用联想；<code className="rounded bg-surface px-1">[@</code> 联想文献；
+          <code className="mx-1 rounded bg-surface px-1">?</code> 在公式内呼出 AI；<code className="rounded bg-surface px-1">Ctrl/Cmd + K</code> 在任意位置呼出 AI。
         </div>
       </Modal>
     </>
@@ -561,8 +592,8 @@ function Toast({ toast }: { toast: ReturnType<typeof useEditorStore.getState>['t
           toast.kind === 'warn'
             ? 'bg-amber-500 text-white'
             : toast.kind === 'success'
-              ? 'bg-ink-900 text-white'
-              : 'bg-white text-ink-700 ring-1 ring-ink-200'
+              ? 'bg-solid text-white'
+              : 'bg-surface text-ink-700 ring-1 ring-ink-200'
         }`}
       >
         {toast.kind === 'success' ? <CheckCircle2 size={14} /> : <Info size={14} />}

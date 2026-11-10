@@ -138,7 +138,7 @@ export default function FloatingMathHUD({
   }
 
   return (
-    <div className="mf-hud mf-hud-dock relative z-20 shrink-0 border-t border-ink-200 bg-white/97 shadow-[0_-8px_24px_-18px_rgba(20,26,35,.35)] backdrop-blur">
+    <div className="mf-hud mf-hud-dock relative z-20 shrink-0 border-t border-ink-200 bg-surface/97 shadow-[0_-8px_24px_-18px_rgba(20,26,35,.35)] backdrop-blur">
       {/* 头部：常驻一行，折叠时也只有这一行 */}
       <div className="flex items-center justify-between gap-2 px-3 py-1">
         <div className="flex min-w-0 items-center gap-1.5 text-[11px] font-medium text-ink-400">
@@ -276,7 +276,7 @@ function SmallBtn({ children, onClick }: { children: React.ReactNode; onClick: (
   return (
     <button
       onClick={onClick}
-      className="inline-flex items-center gap-0.5 rounded bg-white px-1.5 py-0.5 text-[11px] text-ink-600 ring-1 ring-ink-200 transition hover:text-accent-600 hover:ring-accent-300"
+      className="inline-flex items-center gap-0.5 rounded bg-surface px-1.5 py-0.5 text-[11px] text-ink-600 ring-1 ring-ink-200 transition hover:text-accent-600 hover:ring-accent-300"
     >
       {children}
     </button>
