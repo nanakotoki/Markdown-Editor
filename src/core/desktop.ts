@@ -40,7 +40,12 @@ export interface WindowState {
   maximized: boolean
 }
 
-export type MenuCommand = 'toggle-sidebar'
+export type MenuCommand = 'toggle-sidebar' | 'open-file'
+
+/** 命令附带的数据：open-file 带文档相对路径（相对当前工作区，用 / 分隔） */
+export interface MenuCommandPayload {
+  path?: string
+}
 
 export interface DesktopBridge {
   isDesktop: true
@@ -51,7 +56,7 @@ export interface DesktopBridge {
   reveal(filePath: string): Promise<{ ok: boolean }>
   setAlwaysOnTop(flag: boolean): Promise<{ ok: boolean; alwaysOnTop: boolean }>
   getWindowState(): Promise<WindowState>
-  onCommand(handler: (cmd: MenuCommand) => void): () => void
+  onCommand(handler: (cmd: MenuCommand, payload?: MenuCommandPayload) => void): () => void
   onWindowChanged(handler: (state: { alwaysOnTop: boolean }) => void): () => void
 }
 

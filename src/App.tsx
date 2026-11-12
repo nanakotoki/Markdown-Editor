@@ -94,12 +94,18 @@ export default function App() {
     return watchSystemTheme(() => applyTheme('system'))
   }, [settings.theme])
 
-  /* ---------------- 菜单发来的指令（隐藏侧边栏等） ---------------- */
+  /* ---------------- 菜单 / 外部打开发来的指令 ---------------- */
   useEffect(() => {
     const bridge = desktop()
     if (!bridge) return
-    return bridge.onCommand((cmd) => {
-      if (cmd === 'toggle-sidebar') useEditorStore.getState().toggleSidebar()
+    return bridge.onCommand((cmd, payload) => {
+      const st = useEditorStore.getState()
+      if (cmd === 'toggle-sidebar') {
+        st.toggleSidebar()
+      } else if (cmd === 'open-file' && payload?.path) {
+        // 已经在运行的窗口收到「用 MathFlow 打开某个文档」
+        void st.openFile(payload.path)
+      }
     })
   }, [])
 

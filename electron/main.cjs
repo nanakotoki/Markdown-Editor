@@ -24,6 +24,8 @@ let server = null
 let currentRoot = null
 let serverPort = 0
 let exportFn = null
+/** 界面还没加载完就收到了「打开这个文件」，先记着，等页面就绪再发 */
+let deferredOpen = null
 
 /* ------------------------------------------------------------------ */
 /* 配置                                                                */
@@ -99,6 +101,106 @@ async function ensureWorkspace(root) {
 }
 
 /* ------------------------------------------------------------------ */
+/* 命令行 / 文件关联                                                    */
+/* ------------------------------------------------------------------ */
+
+/**
+ * 「用 MathFlow 打开」时，Windows 会把文档路径塞进 argv：
+ *   MathFlow.exe "D:\论文\导数笔记.md"
+ * 以前这里只处理目录，文件路径被直接跳过，于是退回到上次的工作区——
+ * 表现就是「打开了软件，但不是我要的那份文档」。
+ */
+
+const DOC_EXT = /\.(md|markdown|mdown|mkd|mdx|tex|bib|txt)$/i
+
+function cleanArg(raw) {
+  return String(raw ?? '')
+    .trim()
+    .replace(/^"+|"+$/g, '')
+}
+
+/** 从 argv 里挑出要打开的目标：第一个真实存在的文件或目录 */
+function launchTarget(argv) {
+  for (const raw of argv || []) {
+    const arg = cleanArg(raw)
+    if (!arg || arg.startsWith('-') || arg === '.') continue
+    let abs
+    try {
+      abs = path.resolve(arg)
+    } catch {
+      continue
+    }
+    // 开发模式 `electron .` 会把项目目录传进来，那不是用户想打开的文稿
+    if (abs === path.resolve(process.execPath) || abs === path.resolve(APP_ROOT)) continue
+    let st
+    try {
+      st = fs.statSync(abs)
+    } catch {
+      continue
+    }
+    if (st.isDirectory()) return { kind: 'dir', path: abs }
+    // 只认文稿类文件；别的类型（比如误关联的 pdf）忽略，避免把工作区切到奇怪的地方
+    if (st.isFile() && DOC_EXT.test(abs)) return { kind: 'file', path: abs }
+  }
+  return null
+}
+
+function insideRoot(root, abs) {
+  if (!root) return false
+  const rel = path.relative(root, abs)
+  return !!rel && !rel.startsWith('..') && !path.isAbsolute(rel)
+}
+
+/** 相对路径统一用 /，与侧栏树、doc id 的写法保持一致 */
+function toRel(root, abs) {
+  return path.relative(root, abs).split(path.sep).join('/')
+}
+
+/**
+ * 打开这个文件该用哪个工作区：
+ *   · 它本来就在上次的工作区里 → 不换工作区，只把标签页切过去（侧栏保持原样）
+ *   · 在外面 → 用文件所在目录，这样旁边同门的文稿都能在树上看到
+ */
+function workspaceForFile(file) {
+  const last = readConfig().lastRoot
+  if (last && insideRoot(last, file)) return { root: last, file: toRel(last, file) }
+  return { root: path.dirname(file), file: path.basename(file) }
+}
+
+/** 让前端打开某个相对路径的文档；页面没就绪就先挂起 */
+function sendOpenFile(rel) {
+  if (!win) {
+    deferredOpen = rel
+    return
+  }
+  if (win.webContents.isLoading()) {
+    deferredOpen = rel
+    win.webContents.once('did-finish-load', flushDeferredOpen)
+    return
+  }
+  win.webContents.send('mf:command', 'open-file', { path: rel })
+}
+
+function flushDeferredOpen() {
+  const rel = deferredOpen
+  deferredOpen = null
+  if (rel && win) win.webContents.send('mf:command', 'open-file', { path: rel })
+}
+
+/** 已经开着窗口时又「用 MathFlow 打开」了某个文件 */
+async function openFromShell(file) {
+  if (win) {
+    if (win.isMinimized()) win.restore()
+    win.focus()
+  }
+  if (insideRoot(currentRoot, file)) {
+    sendOpenFile(toRel(currentRoot, file))
+    return
+  }
+  await switchWorkspace(path.dirname(file), path.basename(file), false)
+}
+
+/* ------------------------------------------------------------------ */
 /* 内嵌服务                                                            */
 /* ------------------------------------------------------------------ */
 
@@ -126,17 +228,22 @@ async function stopServer() {
   server = null
 }
 
-/** 切换工作区：关旧服务 → 起新服务 → 重新加载窗口 */
-async function switchWorkspace(root) {
+/**
+ * 切换工作区：关旧服务 → 起新服务 → 重新加载窗口；openRel 是顺带要打开的文档。
+ * persist=false 表示这次只是「为了打开某份文档临时换一下目录」，不写进 lastRoot，
+ * 免得用户随手开了个桌面上的 md，下次启动主工作区就变成那个文件夹。
+ */
+async function switchWorkspace(root, openRel = '', persist = true) {
   await ensureWorkspace(root)
   await stopServer()
   const next = await startServer(root)
   server = next.server
   serverPort = next.port
   currentRoot = root
-  writeConfig({ lastRoot: root })
+  if (persist) writeConfig({ lastRoot: root })
   if (win) {
-    await win.loadURL(`http://127.0.0.1:${serverPort}/`)
+    const query = openRel ? `?file=${encodeURIComponent(openRel)}` : ''
+    await win.loadURL(`http://127.0.0.1:${serverPort}/${query}`)
     win.setTitle('MathFlow')
   }
   buildMenu()
@@ -319,7 +426,7 @@ ipcMain.handle('mf:get-window-state', () => ({
 /* 窗口                                                                */
 /* ------------------------------------------------------------------ */
 
-function createWindow() {
+function createWindow(startFile = '') {
   win = new BrowserWindow({
     width: 1360,
     height: 880,
@@ -354,11 +461,14 @@ function createWindow() {
     }
   })
 
+  win.webContents.on('did-finish-load', flushDeferredOpen)
+
   win.on('closed', () => {
     win = null
   })
 
-  win.loadURL(`http://127.0.0.1:${serverPort}/`)
+  const query = startFile ? `?file=${encodeURIComponent(startFile)}` : ''
+  win.loadURL(`http://127.0.0.1:${serverPort}/${query}`)
 }
 
 /* ------------------------------------------------------------------ */
@@ -547,34 +657,44 @@ if (!app.requestSingleInstanceLock()) {
       if (win.isMinimized()) win.restore()
       win.focus()
     }
-    const arg = argv.find((a) => !a.startsWith('-') && a !== process.execPath)
-    if (arg && fs.existsSync(arg) && fs.statSync(arg).isDirectory() && arg !== currentRoot) {
-      switchWorkspace(path.resolve(arg)).catch(() => {})
+    const target = launchTarget(argv)
+    if (!target) return
+    if (target.kind === 'dir') {
+      if (target.path !== currentRoot) switchWorkspace(target.path).catch(() => {})
+    } else {
+      openFromShell(target.path).catch(() => {})
     }
   })
 
   app.whenReady().then(async () => {
-    // 命令行传目录：MathFlow.exe "D:\论文"
+    // 命令行可能是目录也可能是文档：
+    //   MathFlow.exe "D:\论文"            → 换工作区
+    //   MathFlow.exe "D:\论文\导数.md"    → 换到文档所在目录，并打开这份文档
     // 注意 `electron .` 会把 "." 当作参数传进来，那不是用户选的工作区
-    const argRoot = process.argv
-      .slice(1)
-      .find((a) => !a.startsWith('-') && a !== process.execPath && a !== '.' && a !== '--')
+    const target = launchTarget(process.argv.slice(1))
     const cfg = readConfig()
-    const root =
-      argRoot && fs.existsSync(argRoot) && fs.statSync(argRoot).isDirectory()
-        ? path.resolve(argRoot)
-        : PORTABLE_DIR
-          ? DEFAULT_ROOT() // 便携版固定用 exe 旁的 workspace，换电脑也能原样带走
-          : cfg.lastRoot || DEFAULT_ROOT()
+
+    let root
+    let startFile = ''
+    if (target?.kind === 'file') {
+      const picked = workspaceForFile(target.path)
+      root = picked.root
+      startFile = picked.file
+    } else if (target?.kind === 'dir') {
+      root = target.path
+    } else {
+      root = PORTABLE_DIR ? DEFAULT_ROOT() : cfg.lastRoot || DEFAULT_ROOT()
+    }
 
     await ensureWorkspace(root)
     const started = await startServer(root)
     server = started.server
     serverPort = started.port
     currentRoot = root
-    writeConfig({ lastRoot: root })
+    // 只有「按目录启动」才更新上次工作区；单纯为了打开某份文档而换的目录不记住
+    if (target?.kind !== 'file') writeConfig({ lastRoot: root })
 
-    createWindow()
+    createWindow(startFile)
     buildMenu()
 
     app.on('activate', () => {

@@ -25,9 +25,9 @@ contextBridge.exposeInMainWorld('mathflow', {
   /** 窗口始终置顶 */
   setAlwaysOnTop: (flag) => ipcRenderer.invoke('mf:set-always-on-top', flag),
   getWindowState: () => ipcRenderer.invoke('mf:get-window-state'),
-  /** 菜单里点了「隐藏侧边栏」之类，主进程会发一条指令过来 */
+  /** 菜单里点了「隐藏侧边栏」、或外部双击文档要求打开某个文件，主进程会发指令过来 */
   onCommand: (handler) => {
-    const listener = (_event, cmd) => handler(cmd)
+    const listener = (_event, cmd, payload) => handler(cmd, payload)
     ipcRenderer.on('mf:command', listener)
     return () => ipcRenderer.removeListener('mf:command', listener)
   },
