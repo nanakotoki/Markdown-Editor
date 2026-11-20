@@ -57,7 +57,7 @@ export default function SidebarFileTree() {
     docs,
     openFile,
     refreshTree,
-    createLocalDoc,
+    openNewDoc,
     deleteLocalPath,
     workspace,
     showToast,
@@ -208,7 +208,7 @@ export default function SidebarFileTree() {
     <div className="space-y-1">
       <div className="mb-1 flex items-center gap-1">
         <button
-          onClick={() => void createLocalDoc(currentDir)}
+          onClick={() => openNewDoc(currentDir)}
           disabled={workspace?.readonly}
           className="flex flex-1 items-center justify-center gap-1 rounded-lg border border-dashed border-ink-200 px-2 py-1.5 text-[11.5px] text-ink-500 transition hover:border-accent-300 hover:text-accent-600 disabled:cursor-not-allowed disabled:opacity-50"
           title={currentDir ? `在 ${currentDir}/ 下新建` : '在工作区根目录新建'}
@@ -252,7 +252,7 @@ export default function SidebarFileTree() {
             {
               icon: <FilePlus2 size={12} />,
               label: '在此新建文档',
-              run: () => void createLocalDoc(menu.node.type === 'dir' ? menu.node.path : parentDir(menu.node.path)),
+              run: () => openNewDoc(menu.node.type === 'dir' ? menu.node.path : parentDir(menu.node.path)),
             },
             { icon: <Copy size={12} />, label: '复制相对路径', run: () => void copyPath(menu.node) },
             { divider: true },

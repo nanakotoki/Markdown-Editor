@@ -15,6 +15,7 @@ import MacroDrawer from './components/Builders/MacroDrawer'
 import AIAssistantModal from './components/Builders/AIAssistantModal'
 import ManualModal from './components/Layout/ManualModal'
 import AppearanceModal from './components/Layout/AppearanceModal'
+import NewDocModal from './components/Layout/NewDocModal'
 import { Button, Modal } from './components/ui'
 import { mergeWorkspaceBib, useEditorStore, workspaceRefEntries } from './store/useEditorStore'
 import { macrosToKatex } from './core/katexSafeRender'
@@ -25,6 +26,7 @@ import { applyTheme, watchSystemTheme } from './core/theme'
 import { desktop } from './core/desktop'
 import { collectAnchors, flashLine, indexAnchors, lineToY, yToLine, type Anchor, type AnchorIndex } from './core/scrollSync'
 import { editorBridge } from './store/editorBridge'
+import { getViewLine, setViewLine } from './core/viewAnchor'
 
 export default function App() {
   const {
@@ -47,7 +49,7 @@ export default function App() {
     workspace,
     indexBib,
     indexLabels,
-    createLocalDoc,
+    openNewDoc,
   } = useEditorStore()
 
   const setViewMode = useEditorStore((s) => s.setViewMode)
@@ -221,7 +223,8 @@ export default function App() {
     return () => window.clearTimeout(t)
   }, [deferred, viewMode, activeDocId, settings.previewFontSize, settings.previewLineHeight, settings.previewFont, rebuildAnchors])
 
-  /** 换文件时分屏两侧都回到开头——否则左栏在顶部、右栏还停在上一个文件的位置 */
+  /** 换文件时分屏右侧回到开头——否则左栏在顶部、右栏还停在上一个文件的位置。
+   *  只在「换文件」时做：切换视图要保留位置，不能被这条规则清掉。 */
   useEffect(() => {
     if (viewMode !== 'split') return
     const p = previewScrollRef.current
@@ -229,7 +232,8 @@ export default function App() {
     // 这次滚动是我们自己做的，别让它反过来把编辑器也拽走
     syncLock.current = { side: 'preview', until: performance.now() + 300 }
     p.scrollTop = 0
-  }, [activeDocId, viewMode])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeDocId])
 
   const jumpToSource = useCallback((line: number) => {
     const api = editorBridge.current
@@ -359,7 +363,7 @@ export default function App() {
             root={workspace?.root}
             readonly={workspace?.readonly}
             error={bootError}
-            onCreate={() => void createLocalDoc('')}
+            onCreate={() => openNewDoc('')}
           />
         </div>
         <Modals
@@ -380,6 +384,8 @@ export default function App() {
       /* 纯源码用 plain；左右分屏的左栏也必须是「真源码」——
          不隐藏标记、不渲染公式/表格，否则左栏等于第二份预览，和右栏重复 */
       plain={viewMode === 'source' || viewMode === 'split'}
+      initialLine={getViewLine(doc.id)}
+      onViewportLine={(line) => setViewLine(doc.id, line)}
       onChange={(v) => updateContent(doc.id, v)}
       getRefs={() => allRefs}
       getBib={() => bibForRender}
@@ -402,6 +408,8 @@ export default function App() {
       scrollElementRef={previewScrollRef}
       docTitle={doc.title}
       docPath={doc.filePath}
+      initialLine={getViewLine(doc.id)}
+      onViewportLine={(line) => setViewLine(doc.id, line)}
     />
   )
 
@@ -418,6 +426,8 @@ export default function App() {
       className="w-full flex-1"
       docTitle={doc.title}
       docPath={doc.filePath}
+      initialLine={getViewLine(doc.id)}
+      onViewportLine={(line) => setViewLine(doc.id, line)}
     />
   )
 
@@ -556,6 +566,7 @@ function Modals({
       <ExportModal open={modal === 'export'} onClose={() => openModal(null)} />
       <ManualModal open={modal === 'manual'} onClose={() => openModal(null)} />
       <AppearanceModal open={modal === 'appearance'} onClose={() => openModal(null)} />
+      <NewDocModal open={modal === 'newdoc'} onClose={() => openModal(null)} />
 
       <Modal
         open={modal === 'cheatsheet'}

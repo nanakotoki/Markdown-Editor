@@ -30,6 +30,10 @@ export interface MathFlowEditorProps {
   onRequestBuilder: (kind: 'matrix' | 'ai' | 'plot', latex: string) => void
   /** 纯源码模式：关闭内联 KaTeX 替换 */
   plain?: boolean
+  /** 打开时先滚到这一行（切换视图时保持位置用） */
+  initialLine?: number
+  /** 滚动时上报视口顶部行号 */
+  onViewportLine?: (line: number) => void
 }
 
 const mfHighlight = HighlightStyle.define([
@@ -116,6 +120,8 @@ export default function MathFlowEditor({
   getMacros,
   onRequestBuilder,
   plain = false,
+  initialLine,
+  onViewportLine,
 }: MathFlowEditorProps) {
   const hostRef = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -139,6 +145,12 @@ export default function MathFlowEditor({
 
   const showToast = useEditorStore((s) => s.showToast)
   const addFavorite = useEditorStore((s) => s.addFavorite)
+
+  /** 挂载时读取一次的「上次看到第几行」与滚动上报回调（用 ref 避免重建编辑器） */
+  const initialLineRef = useRef(initialLine ?? 0)
+  initialLineRef.current = initialLine ?? 0
+  const viewportLineRef = useRef(onViewportLine)
+  viewportLineRef.current = onViewportLine
 
   /** 编号规则（公式按节 / 写法）——编辑器里的行间公式要和右侧预览显示同一个编号 */
   const getNumbering = useCallback(() => {
@@ -349,7 +361,7 @@ export default function MathFlowEditor({
           },
         ]),
         autoPageField,
-        mathCompartment.of(plain ? [] : [...mathRenderPlugin(() => getMacros(), getNumbering), markdownPreviewPlugin(getNumbering), markdownSmartInput()]),
+        mathCompartment.of(plain ? [] : [...mathRenderPlugin(() => getMacros(), getNumbering), markdownPreviewPlugin(getNumbering, () => getMacros()), markdownSmartInput()]),
         snippetExtensions({
           onAskAI: () => {
             const view = viewRef.current
@@ -417,9 +429,36 @@ export default function MathFlowEditor({
     // 首次进入就要有分页线，不用等用户敲第一个字
     schedulePageBreaks()
 
+    /* ---------- 视图切换时保持位置 ---------- */
+    const wantLine = initialLineRef.current
+    if (wantLine > 1) {
+      // 等一帧：容器尺寸（分屏宽度、侧栏是否展开）落定后行高才准确
+      requestAnimationFrame(() => {
+        if (viewRef.current !== view) return
+        const l = view.state.doc.line(clampLine(view, wantLine))
+        view.dispatch({ effects: EditorView.scrollIntoView(l.from, { y: 'start', yMargin: 12 }) })
+      })
+    }
+    let rafScroll = 0
+    const onScroll = () => {
+      if (rafScroll) return
+      rafScroll = requestAnimationFrame(() => {
+        rafScroll = 0
+        // 坐标要取「滚动容器左上方」，写死成页面左上角会落到工具栏里，
+        // CM 只能夹到首行，报出来的行号就永远偏早。
+        const rect = view.scrollDOM.getBoundingClientRect()
+        const pos = view.posAtCoords({ x: rect.left + 60, y: rect.top + 12 })
+        if (pos == null) return
+        viewportLineRef.current?.(view.state.doc.lineAt(pos).number)
+      })
+    }
+    view.scrollDOM.addEventListener('scroll', onScroll, { passive: true })
+
     return () => {
       if (timerRef.current) window.clearTimeout(timerRef.current)
       if (pageTimer.current) window.clearTimeout(pageTimer.current)
+      if (rafScroll) cancelAnimationFrame(rafScroll)
+      view.scrollDOM.removeEventListener('scroll', onScroll)
       view.destroy()
       viewRef.current = null
     }
@@ -523,7 +562,9 @@ export default function MathFlowEditor({
       lineAtViewportTop: () => {
         const v = view()
         if (!v) return null
-        const pos = v.posAtCoords({ x: 48, y: 12 })
+        // 同上：以滚动容器为基准，别用页面坐标
+        const rect = v.scrollDOM.getBoundingClientRect()
+        const pos = v.posAtCoords({ x: rect.left + 60, y: rect.top + 12 })
         return pos == null ? null : v.state.doc.lineAt(pos).number
       },
       lineAtCaret: () => {
@@ -566,7 +607,7 @@ export default function MathFlowEditor({
     if (!view) return
     view.dispatch({
       effects: mathCompartment.reconfigure(
-        plain ? [] : [...mathRenderPlugin(() => getMacros(), getNumbering), markdownPreviewPlugin(getNumbering), markdownSmartInput()]
+        plain ? [] : [...mathRenderPlugin(() => getMacros(), getNumbering), markdownPreviewPlugin(getNumbering, () => getMacros()), markdownSmartInput()]
       ),
     })
   }, [plain, mathCompartment, getMacros, getNumbering])

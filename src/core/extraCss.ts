@@ -103,7 +103,9 @@ export const EXTRA_CSS = `
 .mf-academic figcaption{margin-top:.45em;font-size:.9em;color:#1f2733;text-align:center}
 .mf-academic img{max-width:100%;height:auto}
 .mf-academic p>img:only-child,.mf-academic figure img{display:block;margin:0 auto}
-.mf-academic svg{max-width:100%;height:auto}
+.mf-academic svg{max-width:100%;height:auto}/* KaTeX 伸缩箭头是一张 400em 宽的 SVG，靠 hide-tail 裁出箭头那一截；
+   上面的 max-width 会把它压成发丝，公式里就只剩箭头上的文字 */
+.mf-academic .katex svg{max-width:none;height:inherit}
 .mf-academic [align='center'],.mf-academic center{text-align:center}
 /* 段落的 justify / 首行缩进会盖掉继承来的对齐，容器里的一级子元素要跟着走 */
 .mf-academic [align]>*,.mf-academic center>*{text-align:inherit}

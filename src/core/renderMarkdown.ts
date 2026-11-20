@@ -9,6 +9,7 @@ import {
   DEFAULT_NUMBERING,
   eqTagText,
   isEnglishText,
+  sectionDepthOf,
   thmLabel,
   type EqNumbering,
   type EqTagStyle,
@@ -102,6 +103,73 @@ export interface RenderOptions {
 
 /** 绝对地址（http:、data:、/x、#x）原样保留，只有相对路径才拼资源前缀 */
 const ABS_SRC_RE = /^(?:[A-Za-z][A-Za-z0-9+.-]*:|\/\/|\/|#|\?)/
+
+/* ------------------------------------------------------------------ *
+ *  HTML 实体
+ * ------------------------------------------------------------------ */
+
+/**
+ * 常用命名实体。
+ *
+ * 为什么要自己做：正文里的 `&emsp;`、`&nbsp;` 这类写法会被 remark 原样交给文本节点，
+ * 我们再用 escapeHtml 输出时会被转成 `&amp;emsp;`，页面上就真的显示「&emsp;」六个字符。
+ * 原始 HTML 块（`<div>` 里的）浏览器自己会解析，所以只处理文本节点即可。
+ *
+ * 只收常见的一批，其余的用数字实体（`&#8195;` / `&#x2003;`）兜底。
+ */
+const NAMED_ENTITIES: Record<string, string> = {
+  // 空白
+  nbsp: '\u00a0', ensp: '\u2002', emsp: '\u2003', thinsp: '\u2009', hairsp: '\u200a',
+  zwnj: '\u200c', zwj: '\u200d', shy: '\u00ad', Tab: '\t', NewLine: '\n',
+  // 标点
+  ndash: '\u2013', mdash: '\u2014', hellip: '\u2026', middot: '\u00b7', bull: '\u2022',
+  laquo: '\u00ab', raquo: '\u00bb', lsaquo: '\u2039', rsaquo: '\u203a',
+  ldquo: '\u201c', rdquo: '\u201d', lsquo: '\u2018', rsquo: '\u2019',
+  sbquo: '\u201a', bdquo: '\u201e', prime: '\u2032', Prime: '\u2033',
+  sect: '\u00a7', para: '\u00b6', dagger: '\u2020', Dagger: '\u2021', permil: '\u2030',
+  iexcl: '\u00a1', iquest: '\u00bf', deg: '\u00b0', micro: '\u00b5',
+  // 符号
+  copy: '\u00a9', reg: '\u00ae', trade: '\u2122', euro: '\u20ac', pound: '\u00a3',
+  yen: '\u00a5', cent: '\u00a2', times: '\u00d7', divide: '\u00f7', plusmn: '\u00b1',
+  minus: '\u2212', frac12: '\u00bd', frac14: '\u00bc', frac34: '\u00be',
+  sup1: '\u00b9', sup2: '\u00b2', sup3: '\u00b3', larr: '\u2190', uarr: '\u2191',
+  rarr: '\u2192', darr: '\u2193', harr: '\u2194', lArr: '\u21d0', rArr: '\u21d2',
+  hArr: '\u21d4', le: '\u2264', ge: '\u2265', ne: '\u2260', equiv: '\u2261',
+  asymp: '\u2248', infin: '\u221e', sum: '\u2211', prod: '\u220f', radic: '\u221a',
+  int: '\u222b', part: '\u2202', nabla: '\u2207', isin: '\u2208', notin: '\u2209',
+  cap: '\u2229', cup: '\u222a', sub: '\u2282', sup: '\u2283', empty: '\u2205',
+  forall: '\u2200', exist: '\u2203', and: '\u2227', or: '\u2228', sim: '\u223c',
+  prop: '\u221d', ang: '\u2220', perp: '\u22a5', there4: '\u2234',
+  // 希腊（大写首字母）
+  Alpha: '\u0391', Beta: '\u0392', Gamma: '\u0393', Delta: '\u0394', Theta: '\u0398',
+  Lambda: '\u039b', Pi: '\u03a0', Sigma: '\u03a3', Phi: '\u03a6', Psi: '\u03a8', Omega: '\u03a9',
+  alpha: '\u03b1', beta: '\u03b2', gamma: '\u03b3', delta: '\u03b4', epsilon: '\u03b5',
+  zeta: '\u03b6', eta: '\u03b7', theta: '\u03b8', iota: '\u03b9', kappa: '\u03ba',
+  lambda: '\u03bb', mu: '\u03bc', nu: '\u03bd', xi: '\u03be', omicron: '\u03bf',
+  pi: '\u03c0', rho: '\u03c1', sigma: '\u03c3', tau: '\u03c4', upsilon: '\u03c5',
+  phi: '\u03c6', chi: '\u03c7', psi: '\u03c8', omega: '\u03c9',
+}
+
+const ENTITY_RE = /&(#x[0-9a-fA-F]+|#\d+|[A-Za-z][A-Za-z0-9]{1,31});/g
+
+/** 把 `&emsp;` `&#8195;` `&#x2003;` 之类还原成字符；认不出的原样保留 */
+export function decodeHtmlEntities(text: string): string {
+  if (!text || text.indexOf('&') < 0) return text
+  return text.replace(ENTITY_RE, (raw, body: string) => {
+    if (body[0] === '#') {
+      const code = body[1] === 'x' || body[1] === 'X'
+        ? Number.parseInt(body.slice(2), 16)
+        : Number.parseInt(body.slice(1), 10)
+      if (!Number.isFinite(code) || code <= 0 || code > 0x10ffff) return raw
+      try {
+        return String.fromCodePoint(code)
+      } catch {
+        return raw
+      }
+    }
+    return NAMED_ENTITIES[body] ?? NAMED_ENTITIES[body.toLowerCase()] ?? raw
+  })
+}
 
 /**
  * 把相对路径拼到资源前缀后面，顺手消掉 `.` 与 `..`。
@@ -265,13 +333,180 @@ export function normalizeDirectives(md: string): string {
   )
 }
 
+/**
+ * 行间公式组（align）——多行公式的「条件 / 编号」自动对齐
+ * ---------------------------------------------------------------------------
+ * 一段普通 `$$…$$` 只排一条式子，条件写在公式里、编号由 CSS 靠右，
+ * 几条式子并排放时，条件和编号都按各自宽度漂着，看着散。
+ *
+ * 这里支持两种写法，渲染成同一张「公式列 + 条件列 + 编号列」的表格：
+ *
+ *   $$
+ *   \begin{align}
+ *   f(x) &= x^{2} && (x>0) \\
+ *   g(x) &= 1    && (x<0)
+ *   \end{align}
+ *   $$
+ *
+ *   ::: eqn gap=2em
+ *   f(x) &= x^{2} && (x>0) \\
+ *   g(x) &= 1    && (x<0)
+ *   :::
+ *
+ * `&` 是列分隔符：奇数列右对齐、偶数列左对齐（与 LaTeX alignat 一致），
+ * 连续两个 `&` 会空出一列，习惯上把条件放在那之后，于是所有条件左端对齐。
+ * 每行默认自动编号；某行写 `\nonumber` 不编号，写 `\tag{...}` 用手写编号。
+ */
+const ALIGN_ENVS = 'align|alignat|flalign|eqnarray|gather|xalignat'
+const ALIGN_BLOCK_RE = new RegExp(`^\\s*\\\\begin\\{(${ALIGN_ENVS})\\*?\\}[\\s\\S]*\\\\end\\{\\1\\*?\\}\\s*$`)
+
+/** 是不是「整段就是一个 align 环境」的行间公式 */
+export function isAlignBlock(value: string): boolean {
+  return ALIGN_BLOCK_RE.test(value ?? '')
+}
+
+/** 去掉最外层的 \begin{align} … \end{align}，只留中间的行 */
+function alignBody(value: string): string {
+  const m = /^\s*\\begin\{([a-zA-Z*]+)\}([\s\S]*)\\end\{\1\}\s*$/.exec(value ?? '')
+  return m ? m[2] : value ?? ''
+}
+
+/**
+ * 按「顶层」分隔符切分：忽略 {} 里的内容，也忽略嵌套 \begin…\end 里的内容。
+ * sep 返回分隔符长度（0 表示这不是分隔符），这样 `\\` 与 `&` 都能复用。
+ */
+function splitTopLevel(src: string, sep: (s: string, i: number) => number): string[] {
+  const out: string[] = []
+  let depth = 0
+  let env = 0
+  let start = 0
+  for (let i = 0; i < src.length; i++) {
+    const ch = src[i]
+    if (depth === 0 && env === 0) {
+      const n = sep(src, i)
+      if (n > 0) {
+        out.push(src.slice(start, i))
+        start = i + n
+        i += n - 1
+        continue
+      }
+    }
+    if (ch === '\\') {
+      const m = /^\\(begin|end)\s*\{/.exec(src.slice(i))
+      if (m) {
+        env = Math.max(0, env + (m[1] === 'begin' ? 1 : -1))
+        i += m[0].length - 1
+        continue
+      }
+      i++ // 跳过被转义的字符，别让 \{ \} \& 参与计数
+      continue
+    }
+    if (ch === '{') depth++
+    else if (ch === '}') depth = Math.max(0, depth - 1)
+  }
+  out.push(src.slice(start))
+  return out
+}
+
+export interface EqRow {
+  /** 各列内容（未渲染的 LaTeX） */
+  cells: string[]
+  /** 手写编号（\tag{...}），有值时不占自动编号 */
+  tag: string | null
+  /** \tag*{} 不带括号 */
+  tagBare: boolean
+  label: string | null
+  /** \nonumber / \notag */
+  skip: boolean
+}
+
+/** 把 align 环境拆成「行 × 列」；空行丢弃 */
+export function parseAlignRows(value: string): EqRow[] {
+  const body = alignBody(value)
+  const rawRows = splitTopLevel(body, (s, i) => (s[i] === '\\' && s[i + 1] === '\\' ? 2 : 0))
+  const rows: EqRow[] = []
+  for (let raw of rawRows) {
+    // \\[2pt] 这类行距参数紧跟在换行符后面，属于上一行的收尾
+    raw = raw.replace(/^\s*\[[^\]]*\]/, '')
+    const tagM = /\\tag(\*?)\s*\{([^{}]*)\}/.exec(raw)
+    const label = /\\label\s*\{([^{}]*)\}/.exec(raw)?.[1] ?? null
+    const skip = /\\nonumber\b|\\notag\b/.test(raw)
+    const clean = raw
+      .replace(/\\tag\*?\s*\{[^{}]*\}/g, '')
+      .replace(/\\label\s*\{[^{}]*\}/g, '')
+      .replace(/\\nonumber\b|\\notag\b/g, '')
+    if (!clean.trim()) continue
+    rows.push({
+      cells: splitTopLevel(clean, (s, i) => (s[i] === '&' ? 1 : 0)),
+      tag: tagM ? tagM[2].trim() : null,
+      tagBare: tagM?.[1] === '*',
+      label,
+      skip,
+    })
+  }
+  return rows
+}
+
+/**
+ * `::: eqn … :::` 先换成 ```eqn 围栏再交给 remark：
+ * 围栏里的 `\\` `&` 是原样文本，不会像普通段落那样把 `\\` 当成转义符吃掉一个反斜杠。
+ * 标记行原地替换，行数不变，所以 `data-mf-line` 的跳转仍然准确。
+ */
+export function eqnContainersToFences(md: string): string {
+  const lines = md.split('\n')
+  let inside = false
+  for (let i = 0; i < lines.length; i++) {
+    const open = /^(\s*):::[ \t]*(eqn|eqgroup|equation-group)\b(.*)$/i.exec(lines[i])
+    if (open) {
+      lines[i] = `${open[1]}\`\`\`eqn ${open[3].trim()}`.trimEnd()
+      inside = true
+      continue
+    }
+    if (inside && /^\s*:::\s*$/.test(lines[i])) {
+      lines[i] = lines[i].replace(':::', '```')
+      inside = false
+    }
+  }
+  return lines.join('\n')
+}
+
+/** 把 ```eqn 代码块换成 math 节点，编号/渲染与 align 环境共用一套逻辑 */
+function promoteEqnBlocks(tree: any) {
+  const walk = (parent: any) => {
+    if (!Array.isArray(parent.children)) return
+    parent.children = parent.children.map((node: any) => {
+      walk(node)
+      if (node.type === 'code' && /^(eqn|eqgroup|equation-group)$/i.test(String(node.lang ?? ''))) {
+        const meta = String(node.meta ?? '')
+        const gap = /(?:gap|sep)\s*=\s*([\d.]+)\s*(em|px|pt|rem)?/i.exec(meta)
+        const width = /(?:width|w)\s*=\s*([\d.]+)\s*(em|px|pt|rem)?/i.exec(meta)
+        return {
+          type: 'math',
+          value: `\\begin{align}\n${String(node.value ?? '')}\n\\end{align}`,
+          position: node.position,
+          data: {
+            mfEqGap: gap ? `${gap[1]}${gap[2] ?? 'em'}` : undefined,
+            mfEqWidth: width ? `${width[1]}${width[2] ?? 'em'}` : undefined,
+          },
+        }
+      }
+      return node
+    })
+  }
+  walk(tree)
+}
+
 export function parseMarkdown(md: string): any {
   const makeProcessor = () =>
     unified().use(remarkParse).use(remarkMath).use(remarkGfm).use(remarkDirective)
-  const source = normalizeDirectives(latexCommandsToMarkdown(md))
+  // Windows 上存盘的文档多是 CRLF：`$` 锚不到带 `\r` 的行尾，`::: eqn` 之类的
+  // 行级语法会全部失配。统一成 LF 再解析（行号不变，位置映射照样准）。
+  const normalized = md.replace(/\r\n?/g, '\n')
+  const source = normalizeDirectives(eqnContainersToFences(latexCommandsToMarkdown(normalized)))
   const tree = makeProcessor().parse(source)
   promoteMarkdownContainers(tree, source, makeProcessor)
   promoteSingleMathParagraphs(tree)
+  promoteEqnBlocks(tree)
   mergeTextDirectives(tree)
   return tree
 }
@@ -359,6 +594,8 @@ interface Ctx extends Required<Pick<RenderOptions, 'macros'>> {
   eqCounter: number
   /** 本节内的公式序号（按节编号时用） */
   eqInSection: number
+  /** 公式组里每一行的锚点序号（保证不重名） */
+  eqAnchorSeq: number
   thmCounters: Record<string, number>
   algCounter: number
   headingCounter: number
@@ -431,6 +668,7 @@ export function renderMarkdown(md: string, opts: RenderOptions = {}): RenderResu
     citationStyle: opts.citationStyle ?? 'numeric',
     eqCounter: 0,
     eqInSection: 0,
+    eqAnchorSeq: 0,
     thmCounters: {},
     algCounter: 0,
     headingCounter: 0,
@@ -522,7 +760,7 @@ function directiveTitle(node: any): { title: string; children: any[] } {
 
 function textOf(node: any): string {
   if (!node) return ''
-  if (node.type === 'text' || node.type === 'inlineCode') return node.value ?? ''
+  if (node.type === 'text' || node.type === 'inlineCode') return decodeHtmlEntities(node.value ?? '')
   if (node.type === 'inlineMath' || node.type === 'math') return node.value ?? ''
   if (node.children) return node.children.map(textOf).join('')
   return ''
@@ -636,6 +874,37 @@ function collect(tree: any, ctx: Ctx) {
     }
 
     if (node.type === 'math') {
+      // 公式组：每一行单独编号，编号与条件由表格列对齐（见 renderAlignBlock）
+      if (isAlignBlock(node.value ?? '')) {
+        const rows = parseAlignRows(node.value)
+        const infos = rows.map((row) => {
+          let tagText: string | null = null
+          let auto = false
+          if (row.tag != null) {
+            tagText = row.tagBare ? row.tag : `(${row.tag})`
+          } else if (!row.skip) {
+            auto = true
+            ctx.eqCounter++
+            ctx.eqInSection++
+            const seq = ctx.numbering.eq === 'section' ? ctx.eqInSection : ctx.eqCounter
+            tagText = eqTagText(Math.max(1, ctx.sectionNo), seq, ctx.numbering.eq, ctx.numbering.eqTag)
+          }
+          const anchor = row.label ? anchorOf(row.label) : `eq-g${++ctx.eqAnchorSeq}`
+          if (row.label) {
+            ctx.refs.push({
+              kind: 'eq',
+              id: bareId(row.label),
+              anchor,
+              label: `${ctx.lang === 'en' ? 'Eq.' : '式'} ${tagText ?? ''}`.trim(),
+              detail: truncate(cleanLatex(row.cells.join(' ')), 48),
+            })
+          }
+          return { text: tagText, auto, anchor }
+        })
+        node.data = { ...(node.data ?? {}), mfAlign: true, mfEqRows: infos }
+        return
+      }
+
       const label = /\\label\s*\{([^{}]*)\}/.exec(node.value ?? '')?.[1]
       ctx.eqCounter++
       ctx.eqInSection++
@@ -728,8 +997,13 @@ function collect(tree: any, ctx: Ctx) {
  *  块级渲染
  * ------------------------------------------------------------------ */
 
+/**
+ * 容器（定理/证明/引用/列表…）内部的块也要打行号。
+ * 否则一个跨 30 行的证明整块只认「起始行」——点击跳、分屏联动、
+ * 切视图保位置全都会退化成「整块跳到开头」。
+ */
 function renderChildren(nodes: any[], ctx: Ctx): string {
-  return nodes.map((n) => renderBlock(n, ctx)).join('\n')
+  return nodes.map((n) => withLineAttr(renderBlock(n, ctx), n.position?.start?.line)).join('\n')
 }
 
 function renderBlock(node: any, ctx: Ctx): string {
@@ -801,6 +1075,7 @@ function renderBlock(node: any, ctx: Ctx): string {
       return `<hr class="mf-hr" />`
 
     case 'math': {
+      if (node.data?.mfAlign) return renderAlignBlock(node, ctx)
       const label = node.data?.mfLabel as string | undefined
       const no = node.data?.mfEqNo as number | undefined
       const tagText = node.data?.mfEqTag as string | undefined
@@ -838,8 +1113,173 @@ function renderBlock(node: any, ctx: Ctx): string {
   }
 }
 
-function cleanLatex(s: string): string {
-  return s
+/**
+ * 公式组渲染：一行 = 一个表格行，列宽由整张表决定，所以
+ * 「条件列」「编号列」在多行之间天然对齐，不用手敲空格。
+ */
+function renderAlignBlock(node: any, ctx: Ctx): string {
+  const rows = parseAlignRows(node.value ?? '')
+  const infos = (node.data?.mfEqRows ?? []) as EqTagInfo[]
+  return alignGroupHtml({
+    rows,
+    tags: infos,
+    gap: node.data?.mfEqGap as string | undefined,
+    width: node.data?.mfEqWidth as string | undefined,
+    macros: ctx.macros,
+    autoNumber: ctx.autoNumber,
+  })
+}
+
+/** 一行公式的编号信息：`text` 为空表示这行不编号 */
+export interface EqTagInfo {
+  text: string | null
+  auto: boolean
+  anchor?: string
+}
+
+/**
+ * 公式组的 HTML：一行 = 一个表格行，列宽由整张表决定，所以
+ * 「条件列」「编号列」在多行之间天然对齐，不用手敲空格。
+ * 预览、导出、编辑器内联渲染都走这里，三处长得一模一样。
+ */
+export function alignGroupHtml(opts: {
+  rows: EqRow[]
+  tags: EqTagInfo[]
+  gap?: string
+  width?: string
+  macros: MacroMap
+  autoNumber?: boolean
+}): string {
+  const { rows, tags, macros } = opts
+  const gap = opts.gap || '1.5em'
+  const width = opts.width || ''
+  const autoNumber = opts.autoNumber !== false
+  const cols = Math.max(1, ...rows.map((r) => r.cells.length))
+
+  const body = rows
+    .map((row, i) => {
+      const info = tags[i]
+      const cells = [...row.cells]
+      while (cells.length < cols) cells.push('')
+      const tds = cells
+        .map((cell, ci) => {
+          const text = cell.trim()
+          // \displaystyle：单元格是行内模式渲染的，不加这句分式会缩成一行高
+          const html = text ? renderMathSafely(`\\displaystyle ${text}`, false, macros).html : ''
+          // 奇数列右（等号左边）、偶数列左（等号及其右边），与 LaTeX align 一致
+          return `<td class="${ci % 2 === 0 ? 'mf-eg-cr' : 'mf-eg-cl'}">${html}</td>`
+        })
+        .join('')
+      // 设置里关掉自动编号后，手写的 \tag 仍然保留
+      const show = info?.text && (info.auto ? autoNumber : true)
+      // 手写编号里可以带公式（\tag{$\star$}）：括号是外面包的，$ 去掉后整串按数学渲染
+      const tagHtml =
+        info?.text && /[\\$]/.test(info.text)
+          ? renderMathSafely(info.text.replace(/\$/g, ''), false, macros).html
+          : escapeHtml(info?.text ?? '')
+      const no = show
+        ? `<a class="mf-eq-tag" href="#${escapeHtml(info.anchor ?? '')}" title="点击定位到这条公式">${tagHtml}</a>`
+        : ''
+      return `<tr${info?.anchor ? ` id="${escapeHtml(info.anchor)}"` : ''}>${tds}<td class="mf-eg-no">${no}</td></tr>`
+    })
+    .join('')
+
+  const style = `--mf-eg-gap:${escapeHtml(gap)}${width ? `;max-width:${escapeHtml(width)}` : ''}`
+  return `<div class="mf-eqgroup" style="${style}"><table class="mf-eg-table"><tbody>${body}</tbody></table></div>`
+}
+
+/**
+ * 只靠源码推算「每个公式块该显示什么编号」。
+ * 编辑器（内联混合 / 纯源码）不能跑完整渲染管线，但又必须和预览的编号一致，
+ * 所以这里按 renderMarkdown 里 collect() 的同一套规则重算一遍：
+ *  · 遇到节标题（与 sectionDepthOf 同规则）重置「节内计数」
+ *  · align 每一行占一个号（`\nonumber` 跳过、`\tag{}` 手写）
+ *  · `::: eqn` 容器等价于一个 align 块
+ * 返回值以「块起始字符偏移」为键，便于和 scanMath 给出的区间对齐。
+ */
+export function eqNumberPlan(
+  text: string,
+  cfg: Pick<NumberingConfig, 'eq' | 'eqTag'> = { eq: 'global', eqTag: 'paren' }
+): Map<number, EqTagInfo[]> {
+  const out = new Map<number, EqTagInfo[]>()
+  const src = text.replace(/\r\n?/g, '\n')
+  const lines = src.split('\n')
+  const offsets: number[] = []
+  let acc = 0
+  for (const l of lines) {
+    offsets.push(acc)
+    acc += l.length + 1
+  }
+  const depth = sectionDepthOf(src)
+  const sectionRe = depth === 1 ? /^#\s/ : /^#{2}\s/
+  let section = 0
+  let total = 0
+  let inSection = 0
+
+  const nextTag = (): string => {
+    total++
+    inSection++
+    const seq = cfg.eq === 'section' ? inSection : total
+    return eqTagText(Math.max(1, section), seq, cfg.eq, cfg.eqTag)
+  }
+  const rowsOf = (alignSrc: string): EqTagInfo[] =>
+    parseAlignRows(alignSrc).map((row) => {
+      if (row.tag != null) return { text: row.tagBare ? row.tag : `(${row.tag})`, auto: false }
+      if (row.skip) return { text: null, auto: false }
+      return { text: nextTag(), auto: true }
+    })
+
+  let i = 0
+  while (i < lines.length) {
+    const raw = lines[i]
+    if (sectionRe.test(raw)) {
+      section++
+      inSection = 0
+      i++
+      continue
+    }
+
+    // ::: eqn（与 eqnContainersToFences 识别的写法一致）
+    if (/^\s*:::[ \t]*(eqn|eqgroup|equation-group)\b/i.test(raw)) {
+      const start = offsets[i]
+      const body: string[] = []
+      let j = i + 1
+      while (j < lines.length && !/^\s*:::\s*$/.test(lines[j])) {
+        body.push(lines[j])
+        j++
+      }
+      out.set(start, rowsOf(`\\begin{align}\n${body.join('\n')}\n\\end{align}`))
+      i = j + 1
+      continue
+    }
+
+    if (/^\s*\$\$/.test(raw)) {
+      const start = offsets[i]
+      const single = /^\s*\$\$([\s\S]*?)\$\$\s*$/.exec(raw)
+      let body = ''
+      if (single) {
+        body = single[1]
+        i++
+      } else {
+        const chunks = [raw.replace(/^\s*\$\$/, '')]
+        let j = i + 1
+        while (j < lines.length && !/\$\$/.test(lines[j])) {
+          chunks.push(lines[j])
+          j++
+        }
+        if (j < lines.length) chunks.push(lines[j].replace(/\$\$[\s\S]*$/, ''))
+        body = chunks.join('\n')
+        i = j + 1
+      }
+      out.set(start, isAlignBlock(body) ? rowsOf(body) : [{ text: nextTag(), auto: true }])
+      continue
+    }
+    i++
+  }
+  return out
+}
+
+function cleanLatex(s: string): string {  return s
     .replace(/\\label\s*\{[^{}]*\}/g, '')
     .replace(/\\[a-zA-Z]+|[{}]/g, '')
     .replace(/\s+/g, ' ')
@@ -1171,6 +1611,9 @@ function refLink(entry: RefEntry, text: string, extraClass = ''): string {
 }
 
 function renderPlainText(text: string, ctx: Ctx): string {
+  // 先把 `&emsp;` / `&#8195;` 这类实体还原成字符，再走引用替换与转义；
+  // 否则 escapeHtml 会把 `&` 转成 `&amp;`，页面上直接显示「&emsp;」这串字母。
+  text = decodeHtmlEntities(text)
   let html = ''
   let last = 0
   const combined = new RegExp([CITE_SRC, REF_SRC, TEXREF_SRC, MENTION_SRC].join('|'), 'g')

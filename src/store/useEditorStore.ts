@@ -53,6 +53,7 @@ export type ModalName =
   | 'manual'
   | 'appearance'
   | 'search'
+  | 'newdoc'
   | null
 
 export type SidebarTab = 'docs' | 'outline' | 'favorites' | 'bib'
@@ -104,6 +105,9 @@ export type RoleFontKey = 'serif' | 'sans' | 'kai' | 'follow' | 'custom'
 /** 界面主题。纸面（阅读模式那几张 A4）不受影响，永远是白的。 */
 export type ThemeMode = 'light' | 'dark' | 'system'
 
+/** 场景主题：同一篇稿子，屏幕看 / 打出来 / 投影，用的字体和字号不是一回事 */
+export type DocThemeKey = 'screen' | 'print' | 'lecture' | 'custom'
+
 export interface Settings {
   autoNumberEquations: boolean
   citationStyle: 'numeric' | 'author-year'
@@ -112,17 +116,25 @@ export interface Settings {
   /* ---- 保存方式：自动（停笔 0.8 秒落盘）/ 手动（只按 Ctrl+S 才写盘）---- */
   saveMode: SaveMode
   /* ---- 外观：正文（渲染结果）---- */
-  previewFont: 'serif' | 'song' | 'kai' | 'sans'
+  previewFont: 'serif' | 'song' | 'kai' | 'sans' | 'custom'
   /** 自定义字体名，非空时覆盖上面的预设（写系统里已装的字体名，如「霞鹜文楷」） */
   previewFontCustom: string
   previewFontSize: number
   previewLineHeight: number
   previewWeight: 400 | 500 | 600
+  /**
+   * 场景主题：屏幕阅读（无衬线）/ 纸质印刷（宋体）/ 讲义投影（黑体大字）。
+   * 点主题 = 一次性写入字体、字号、行距、字重与标题层级跨度；
+   * 之后单独改任一微调项，主题标记为 custom。
+   */
+  docTheme: DocThemeKey
+  /** 标题层级跨度：1 为默认，调大标题之间落差更明显 */
+  headingScale: number
   /* ---- 字体搭配：中西文分开，一处一处都能换 ---- */
   /** 预设：论文（宋体 + Times）/ 讲义（楷体 + Times）/ 简洁（黑体）；手动改任一项后变 custom */
   fontPairing: 'paper' | 'lecture' | 'clean' | 'custom'
   /** 正文西文字体。CSS 逐字回退：西文走 Times，中文仍落到后面的宋体，不需要两套字体文件 */
-  bodyLatin: 'times' | 'lm' | 'georgia' | 'follow' | 'custom'
+  bodyLatin: 'times' | 'lm' | 'georgia' | 'system' | 'follow' | 'custom'
   bodyLatinCustom: string
   /** 定理 / 习题等环境的标题字体（一律加粗） */
   thmHeadFont: RoleFontKey
@@ -134,7 +146,7 @@ export interface Settings {
   solMarkFont: RoleFontKey
   solMarkFontCustom: string
   /* ---- 外观：源码（编辑区）---- */
-  editorFont: 'serif' | 'mono' | 'sans' | 'kai'
+  editorFont: 'serif' | 'mono' | 'sans' | 'kai' | 'custom'
   editorFontCustom: string
   editorFontSize: number
   /* ---- 界面主题：浅色 / 深色 / 跟随系统 ---- */
@@ -183,10 +195,13 @@ export const DEFAULT_SETTINGS: Settings = {
   saveMode: 'auto',
   previewFont: 'serif',
   previewFontCustom: '',
-  previewFontSize: 16.5,
-  previewLineHeight: 1.9,
-  // 宋体在屏幕上偏细，默认给 500：思源宋体用真实的 Medium，系统宋体则轻微合成加厚
-  previewWeight: 500,
+  previewFontSize: 15.5,
+  previewLineHeight: 1.75,
+  // 400 是有意的：系统宋体没有 500 这一档，浏览器会合成加粗，
+  // 屏幕上就成了「大标宋」那种又黑又厚的怪样子（1.0.13 之前就是这个默认值）。
+  previewWeight: 400,
+  docTheme: 'print',
+  headingScale: 1,
   fontPairing: 'paper',
   bodyLatin: 'times',
   bodyLatinCustom: '',
@@ -230,14 +245,24 @@ export function loadSettings(): Settings {
     if (!raw) return { ...DEFAULT_SETTINGS }
     const parsed = JSON.parse(raw) as Partial<Settings>
     const out: Settings = { ...DEFAULT_SETTINGS, ...parsed }
-    // 老配置（1.0.8 之前）没有 fontPairing：顺手把默认字重从 400 提到 500，
-    // 不然升级后「宋体太细」的问题依旧，用户会以为改动没生效。
-    const legacy = parsed.fontPairing === undefined && parsed.bodyLatin === undefined
-    if (legacy && out.previewWeight === 400) out.previewWeight = 500
+    /**
+     * 老配置没有 docTheme：按原来的字体搭配推断一个场景主题。
+     * 只有「字号 / 行距 / 字重」还停在旧默认值（16.5 / 1.9 / 500）时才一并改成
+     * 新默认——那正是「太粗、太大」的来源；用户自己调过的数字原样尊重。
+     */
+    if (parsed.docTheme === undefined) {
+      out.docTheme =
+        out.fontPairing === 'clean' ? 'screen' : out.fontPairing === 'lecture' ? 'lecture' : 'print'
+      if (out.previewFontSize === 16.5) out.previewFontSize = 15.5
+      if (out.previewLineHeight === 1.9) out.previewLineHeight = 1.75
+      if (out.previewWeight === 500) out.previewWeight = 400
+    }
     // 防御：越界或类型不对的值逐个纠正，避免把界面弄坏
-    if (![400, 500, 600].includes(out.previewWeight)) out.previewWeight = 500
-    out.previewFontSize = clampNum(out.previewFontSize, 13, 24, 16.5)
-    out.previewLineHeight = clampNum(out.previewLineHeight, 1.4, 2.6, 1.9)
+    if (![400, 500, 600].includes(out.previewWeight)) out.previewWeight = 400
+    if (!['screen', 'print', 'lecture', 'custom'].includes(out.docTheme)) out.docTheme = 'print'
+    out.headingScale = clampNum(out.headingScale, 0.85, 1.35, 1)
+    out.previewFontSize = clampNum(out.previewFontSize, 13, 24, 15.5)
+    out.previewLineHeight = clampNum(out.previewLineHeight, 1.4, 2.6, 1.75)
     out.editorFontSize = clampNum(out.editorFontSize, 11, 20, 15)
     // 新增字段的枚举值也要兜底：老版本存下来的 settings 里没有这些键
     if (out.thmNumbering !== 'section' && out.thmNumbering !== 'global') out.thmNumbering = 'section'
@@ -263,7 +288,7 @@ export function loadSettings(): Settings {
     if (out.figNumbering !== 'section' && out.figNumbering !== 'global') out.figNumbering = 'section'
     // 字体搭配
     if (!['paper', 'lecture', 'clean', 'custom'].includes(out.fontPairing)) out.fontPairing = 'paper'
-    if (!['times', 'lm', 'georgia', 'follow', 'custom'].includes(out.bodyLatin)) out.bodyLatin = 'times'
+    if (!['times', 'lm', 'georgia', 'system', 'follow', 'custom'].includes(out.bodyLatin)) out.bodyLatin = 'times'
     const ROLES: RoleFontKey[] = ['serif', 'sans', 'kai', 'follow', 'custom']
     if (!ROLES.includes(out.thmHeadFont)) out.thmHeadFont = 'sans'
     if (!ROLES.includes(out.proofMarkFont)) out.proofMarkFont = 'kai'
@@ -432,6 +457,8 @@ interface EditorState {
   activeDocId: string
   viewMode: ViewMode
   modal: ModalName
+  /** 「新建文档」弹窗要建到哪个目录（工作区相对路径，空串=根目录） */
+  newDocDir: string
   sidebarOpen: boolean
   sidebarTab: SidebarTab
   macros: MacroDef[]
@@ -470,6 +497,8 @@ interface EditorState {
   renameDoc: (id: string, title: string) => void
   setViewMode: (m: ViewMode) => void
   openModal: (m: ModalName) => void
+  /** 新建文档前先问名字：打开命名弹窗并记下要建到哪个目录 */
+  openNewDoc: (dir?: string) => void
   toggleSidebar: () => void
   setSidebarTab: (t: SidebarTab) => void
   setMacros: (defs: MacroDef[], source: string) => void
@@ -504,6 +533,7 @@ export const useEditorStore = create<EditorState>()(
       activeDocId: seedDocs[0].id,
       viewMode: 'hybrid',
       modal: null,
+      newDocDir: '',
       sidebarOpen: true,
       sidebarTab: 'docs',
       macros: [],
@@ -929,6 +959,7 @@ export const useEditorStore = create<EditorState>()(
         set((s) => ({ docs: s.docs.map((d) => (d.id === id ? { ...d, title: title || d.title } : d)) })),
       setViewMode: (m) => set({ viewMode: m }),
       openModal: (m) => set({ modal: m }),
+      openNewDoc: (dir = '') => set({ modal: 'newdoc', newDocDir: dir }),
       toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
       setSidebarTab: (t) => set({ sidebarTab: t, sidebarOpen: true }),
       setMacros: (defs, source) => set({ macros: defs, macroSource: source }),
@@ -983,6 +1014,8 @@ export const useEditorStore = create<EditorState>()(
             previewFontSize: DEFAULT_SETTINGS.previewFontSize,
             previewLineHeight: DEFAULT_SETTINGS.previewLineHeight,
             previewWeight: DEFAULT_SETTINGS.previewWeight,
+            docTheme: DEFAULT_SETTINGS.docTheme,
+            headingScale: DEFAULT_SETTINGS.headingScale,
             fontPairing: DEFAULT_SETTINGS.fontPairing,
             bodyLatin: DEFAULT_SETTINGS.bodyLatin,
             bodyLatinCustom: DEFAULT_SETTINGS.bodyLatinCustom,

@@ -3,12 +3,13 @@ import { Check, RotateCcw, TriangleAlert, Type } from 'lucide-react'
 import { Modal } from '../ui'
 import { useEditorStore } from '../../store/useEditorStore'
 import {
-  EDITOR_FONTS,
-  FONT_PAIRINGS,
+  DOC_THEMES,
   LATIN_FONTS,
   PREVIEW_FONTS,
+  SYSTEM_FONT_GROUPS,
   editorFontStack,
   isFontAvailable,
+  resolveEditorStack,
   previewFontStack,
   type EditorFontKey,
   type PreviewFontKey,
@@ -34,18 +35,253 @@ export default function AppearanceModal({ open, onClose }: { open: boolean; onCl
   /** 「自由搭配」默认收起：绝大多数人用预设就够，展开是给要交稿格式的人 */
   const [showRoles, setShowRoles] = useState(false)
   /** 单独改任一角色 = 不再跟随预设，标记成 custom */
-  const setRole = (patch: Partial<Settings>) => updateSettings({ ...patch, fontPairing: 'custom' })
+  const setRole = (patch: Partial<Settings>) =>
+    updateSettings({ ...patch, fontPairing: 'custom', docTheme: 'custom' })
+  /** 改任一微调项就不再算「某个主题」了，但字号字体照用户的选择留着 */
+  const tweak = (patch: Partial<Settings>) => updateSettings({ ...patch, docTheme: 'custom' })
 
   return (
     <Modal
       open={open}
       onOpenChange={(v) => !v && onClose()}
       title="字体与外观"
-      subtitle="渲染结果和源码分开设置，改完立刻生效，设置会被记住"
+      subtitle="先按用途选主题，再按需微调；改完立刻生效，设置会被记住"
       icon={<Type size={18} />}
       width="max-w-4xl"
     >
       <div className="space-y-4">
+        {/* ---------------- 场景主题 ---------------- */}
+        <div className="rounded-xl border border-ink-200 p-3">
+          <SectionTitle>场景主题 · 这份稿子给谁看</SectionTitle>
+          <div className="grid grid-cols-3 gap-2">
+            {DOC_THEMES.map((t) => {
+              const active = settings.docTheme === t.key
+              return (
+                <button
+                  key={t.key}
+                  onClick={() => updateSettings(t.patch)}
+                  className={`rounded-xl border px-3 py-2.5 text-left transition ${
+                    active
+                      ? 'border-accent-400 bg-accent-50/60 ring-1 ring-accent-200'
+                      : 'border-ink-200 bg-surface hover:bg-ink-50'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[13px] font-medium text-ink-800">{t.label}</span>
+                    {active && <Check size={13} className="shrink-0 text-accent-600" />}
+                  </div>
+                  <div
+                    className="mt-2 rounded-lg bg-white px-2 py-2 text-[12.5px] leading-[1.7] text-ink-800 ring-1 ring-ink-100"
+                    style={{ fontFamily: t.sample }}
+                  >
+                    设 f 在 [a, b] 上连续，则存在 ξ
+                  </div>
+                  <div className="mt-1.5 text-[10.5px] leading-tight text-ink-400">{t.note}</div>
+                </button>
+              )
+            })}
+          </div>
+          <p className="mt-2 text-[11px] leading-relaxed text-ink-400">
+            {DOC_THEMES.find((t) => t.key === settings.docTheme)?.detail ??
+              '当前为自定义：下面手调过的字体与字号会原样保留，重新点一个主题才会覆盖它们。'}
+          </p>
+        </div>
+
+        {/* ---------------- 微调 ---------------- */}
+        <div className="rounded-xl border border-ink-200 p-3">
+          <SectionTitle>微调（渲染结果 / 导出 PDF）</SectionTitle>
+          <div className="grid grid-cols-2 gap-x-6">
+            <div>
+              <Row label="中文正文">
+                <FontSelect
+                  value={settings.previewFontCustom ? `font:${settings.previewFontCustom}` : `preset:${settings.previewFont}`}
+                  groups={CJK_FONT_GROUPS}
+                  onChange={(v) =>
+                    v.startsWith('preset:')
+                      ? tweak({ previewFont: v.slice(7) as Settings['previewFont'], previewFontCustom: '' })
+                      : tweak({ previewFont: 'custom', previewFontCustom: v.slice(5) })
+                  }
+                />
+              </Row>
+              <Row label="西文正文">
+                <FontSelect
+                  value={settings.bodyLatin === 'custom' ? `font:${settings.bodyLatinCustom}` : `preset:${settings.bodyLatin}`}
+                  groups={LATIN_FONT_GROUPS}
+                  onChange={(v) =>
+                    v.startsWith('preset:')
+                      ? tweak({ bodyLatin: v.slice(7) as Settings['bodyLatin'], bodyLatinCustom: '' })
+                      : tweak({ bodyLatin: 'custom', bodyLatinCustom: v.slice(5) })
+                  }
+                />
+              </Row>
+              <Row label="字号">
+                <Slider
+                  value={settings.previewFontSize}
+                  min={13}
+                  max={24}
+                  step={0.5}
+                  suffix="px"
+                  onChange={(v) => tweak({ previewFontSize: v })}
+                />
+              </Row>
+              <Row label="行距">
+                <Slider
+                  value={settings.previewLineHeight}
+                  min={1.4}
+                  max={2.6}
+                  step={0.05}
+                  suffix=""
+                  onChange={(v) => tweak({ previewLineHeight: v })}
+                />
+              </Row>
+            </div>
+
+            <div>
+              <Row label="字重">
+                <div className="flex gap-2">
+                  {[
+                    { v: 400 as const, label: '常规', note: '印刷用，宋体本身的样子' },
+                    { v: 500 as const, label: '中等', note: '屏幕略厚，宋体会被合成加粗' },
+                    { v: 600 as const, label: '加粗', note: '重墨，适合投屏' },
+                  ].map((o) => (
+                    <button
+                      key={o.v}
+                      onClick={() => tweak({ previewWeight: o.v })}
+                      title={o.note}
+                      className={`rounded-lg px-3 py-1.5 text-[12px] transition ${
+                        settings.previewWeight === o.v
+                          ? 'bg-accent-50 text-accent-700 ring-1 ring-accent-300'
+                          : 'text-ink-600 ring-1 ring-ink-200 hover:bg-ink-50'
+                      }`}
+                    >
+                      {o.label}
+                    </button>
+                  ))}
+                </div>
+                <p className="mt-1.5 text-[11px] leading-relaxed text-ink-400">
+                  系统宋体只有常规一档，选「中等 / 加粗」是浏览器合成加厚，笔画会糊成一团 ——
+                  纸上印刷建议留在「常规」。
+                </p>
+              </Row>
+
+              <Row label="标题跨度">
+                <Slider
+                  value={settings.headingScale}
+                  min={0.85}
+                  max={1.35}
+                  step={0.01}
+                  suffix="×"
+                  onChange={(v) => tweak({ headingScale: v })}
+                />
+                <p className="mt-1.5 text-[11px] leading-relaxed text-ink-400">
+                  一级标题 1.9em、二级 1.5em、三级 1.24em 都乘这个系数。觉得小标题和正文差不多大就往上拉。
+                </p>
+              </Row>
+
+              <Row label="导出字体">
+                <FontNameInput
+                  value={settings.exportFontCustom}
+                  placeholder="留空则与上面一致"
+                  onChange={(v) => updateSettings({ exportFontCustom: v })}
+                />
+              </Row>
+
+              <button
+                onClick={() => setShowRoles((v) => !v)}
+                className="text-[11.5px] text-accent-700 hover:underline"
+              >
+                {showRoles ? '收起' : '定理标题 / 「证」/「解」的字体'}
+              </button>
+            </div>
+          </div>
+
+          {showRoles && (
+            <div className="mt-2 space-y-1.5 rounded-lg bg-ink-50/70 p-2.5">
+              <RolePicker
+                label="环境标题"
+                value={settings.thmHeadFont}
+                options={ROLE_OPTIONS}
+                onChange={(v) => setRole({ thmHeadFont: v as RoleFontKey })}
+                custom={settings.thmHeadFontCustom}
+                onCustom={(v) => setRole({ thmHeadFontCustom: v, thmHeadFont: 'custom' })}
+                placeholder="如 方正小标宋"
+              />
+              <RolePicker
+                label="证明「证」"
+                value={settings.proofMarkFont}
+                options={ROLE_OPTIONS}
+                onChange={(v) => setRole({ proofMarkFont: v as RoleFontKey })}
+                custom={settings.proofMarkFontCustom}
+                onCustom={(v) => setRole({ proofMarkFontCustom: v, proofMarkFont: 'custom' })}
+              />
+              <RolePicker
+                label="解答「解」"
+                value={settings.solMarkFont}
+                options={ROLE_OPTIONS}
+                onChange={(v) => setRole({ solMarkFont: v as RoleFontKey })}
+                custom={settings.solMarkFontCustom}
+                onCustom={(v) => setRole({ solMarkFontCustom: v, solMarkFont: 'custom' })}
+              />
+            </div>
+          )}
+        </div>
+
+        {/* ---------------- 编辑区 ---------------- */}
+        <div className="rounded-xl border border-ink-200 p-3">
+          <SectionTitle>源码（编辑区）</SectionTitle>
+          <div className="grid grid-cols-2 gap-x-6">
+            <div>
+              <Row label="字体">
+                <FontSelect
+                  value={settings.editorFontCustom ? `font:${settings.editorFontCustom}` : `preset:${settings.editorFont}`}
+                  groups={EDITOR_FONT_GROUPS}
+                  onChange={(v) =>
+                    v.startsWith('preset:')
+                      ? updateSettings({ editorFont: v.slice(7) as Settings['editorFont'], editorFontCustom: '' })
+                      : updateSettings({ editorFont: 'custom', editorFontCustom: v.slice(5) })
+                  }
+                />
+                <p className="mt-1.5 text-[11px] leading-relaxed text-ink-400">
+                  列的是系统里常见的字体，装了就用，没装浏览器自动回退；也可以直接填字体名。
+                </p>
+              </Row>
+              <Row label="字号">
+                <Slider
+                  value={settings.editorFontSize}
+                  min={11}
+                  max={20}
+                  step={0.5}
+                  suffix="px"
+                  onChange={(v) => updateSettings({ editorFontSize: v })}
+                />
+              </Row>
+              <Row label="自定义">
+                <FontNameInput
+                  value={settings.editorFontCustom}
+                  placeholder="等宽字体名，如 JetBrains Mono"
+                  onChange={(v) => updateSettings({ editorFontCustom: v })}
+                />
+              </Row>
+            </div>
+            <div className="rounded-xl border border-ink-200 bg-ink-50 px-3 py-2">
+              <div className="mb-1 text-[11px] font-medium text-ink-400">实时效果</div>
+              <div className="mf-academic rounded-lg bg-white px-3 py-2.5 ring-1 ring-ink-100">
+                <div className="mf-h2 mf-heading" style={{ margin: 0 }}>第 1 节　标题长这样</div>
+                <p style={{ margin: '6px 0 0' }}>
+                  设 <em>f</em>(<em>x</em>) = <em>ax</em>² + <em>bx</em> + <em>c</em>，当 Δ &gt; 0 时方程有两个不等实根。这段就是正文最终的字号、行距与字重。
+                </p>
+              </div>
+              <div
+                className="mt-2 rounded-lg bg-surface px-2.5 py-1.5 text-ink-700 ring-1 ring-ink-100"
+                style={{ fontFamily: resolveEditorStack(settings), fontSize: settings.editorFontSize }}
+              >
+                <div className="text-ink-400">## 源码区</div>
+                <div>$$\int_0^1 x^2\,dx = 	frac&#123;1&#125;&#123;3&#125;$$</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* ---------------- 界面主题 ---------------- */}
         <div className="rounded-xl border border-ink-200 p-3">
           <SectionTitle>界面</SectionTitle>
@@ -110,219 +346,6 @@ export default function AppearanceModal({ open, onClose }: { open: boolean; onCl
             </p>
           </Row>
         </div>
-
-        <div className="grid grid-cols-2 gap-6">
-          {/* ---------------- 渲染结果 ---------------- */}
-          <section>
-            <SectionTitle>渲染结果（右栏 / 预览 / 导出）</SectionTitle>
-
-            {/* ---------------- 字体搭配：默认固定搭配，也可以拆开自由配 ---------------- */}
-            <Row label="字体搭配">
-              <div className="grid grid-cols-3 gap-2">
-                {FONT_PAIRINGS.map((p) => (
-                  <ChoiceCard
-                    key={p.key}
-                    active={settings.fontPairing === p.key}
-                    title={p.label}
-                    note={p.note}
-                    sampleStyle={{ fontFamily: p.sample }}
-                    onClick={() => updateSettings(p.patch)}
-                  />
-                ))}
-              </div>
-              <p className="mt-1.5 text-[11px] leading-relaxed text-ink-400">
-                默认「论文」= 中文宋体 ＋ 西文 Times New Roman，环境标题黑体加粗，「证」楷体加粗、「解」跟正文加粗。
-                Times 的字脚高度与宋体最接近，中英混排时基线不会一高一低；标题换黑体，是为了让「定理 2.1」从宋体正文里跳出来。
-              </p>
-              <button
-                onClick={() => setShowRoles((v) => !v)}
-                className="mt-1.5 text-[11.5px] text-accent-700 hover:underline"
-              >
-                {showRoles ? '收起自由搭配' : '不满意这套？逐项自由搭配'}
-              </button>
-
-              {showRoles && (
-                <div className="mt-2 space-y-1.5 rounded-lg bg-ink-50/70 p-2.5">
-                  <RolePicker
-                    label="西文正文"
-                    value={settings.bodyLatin}
-                    options={LATIN_FONTS.map((f) => ({ v: f.key, label: f.label }))}
-                    onChange={(v) => setRole({ bodyLatin: v as Settings['bodyLatin'] })}
-                    custom={settings.bodyLatinCustom}
-                    onCustom={(v) => setRole({ bodyLatinCustom: v, bodyLatin: 'custom' })}
-                    placeholder="如 Minion Pro"
-                  />
-                  <RolePicker
-                    label="环境标题"
-                    value={settings.thmHeadFont}
-                    options={ROLE_OPTIONS}
-                    onChange={(v) => setRole({ thmHeadFont: v as RoleFontKey })}
-                    custom={settings.thmHeadFontCustom}
-                    onCustom={(v) => setRole({ thmHeadFontCustom: v, thmHeadFont: 'custom' })}
-                    placeholder="如 方正小标宋"
-                  />
-                  <RolePicker
-                    label="证明「证」"
-                    value={settings.proofMarkFont}
-                    options={ROLE_OPTIONS}
-                    onChange={(v) => setRole({ proofMarkFont: v as RoleFontKey })}
-                    custom={settings.proofMarkFontCustom}
-                    onCustom={(v) => setRole({ proofMarkFontCustom: v, proofMarkFont: 'custom' })}
-                  />
-                  <RolePicker
-                    label="解答「解」"
-                    value={settings.solMarkFont}
-                    options={ROLE_OPTIONS}
-                    onChange={(v) => setRole({ solMarkFont: v as RoleFontKey })}
-                    custom={settings.solMarkFontCustom}
-                    onCustom={(v) => setRole({ solMarkFontCustom: v, solMarkFont: 'custom' })}
-                  />
-                  <p className="pt-0.5 text-[10.5px] leading-relaxed text-ink-400">
-                    中文正文在下面单独选；标题、「证」、「解」始终加粗，这里只换字体族。改过任一项就记为「自定义」，三张预设卡片不再高亮。
-                  </p>
-                </div>
-              )}
-            </Row>
-
-            <Row label="中文正文">
-              <div className="grid grid-cols-2 gap-2">
-                {PREVIEW_FONTS.map((f) => (
-                  <ChoiceCard
-                    key={f.key}
-                    active={settings.previewFont === f.key}
-                    title={f.label}
-                    note={f.note}
-                    sampleStyle={{ fontFamily: previewFontStack(f.key as PreviewFontKey) }}
-                    onClick={() => setRole({ previewFont: f.key })}
-                  />
-                ))}
-              </div>
-            </Row>
-
-            <Row label="自定义">
-              <FontNameInput
-                value={settings.previewFontCustom}
-                placeholder="已装字体名，如 霞鹜文楷"
-                onChange={(v) => setRole({ previewFontCustom: v })}
-              />
-            </Row>
-
-            <Row label="字号">
-              <Slider
-                value={settings.previewFontSize}
-                min={13}
-                max={24}
-                step={0.5}
-                suffix="px"
-                onChange={(v) => updateSettings({ previewFontSize: v })}
-              />
-            </Row>
-
-            <Row label="行距">
-              <Slider
-                value={settings.previewLineHeight}
-                min={1.4}
-                max={2.6}
-                step={0.05}
-                suffix=""
-                onChange={(v) => updateSettings({ previewLineHeight: v })}
-              />
-            </Row>
-
-            <Row label="字重">
-              <div className="flex gap-2">
-                {[
-                  { v: 400 as const, label: '常规', note: '默认' },
-                  { v: 500 as const, label: '中等', note: '笔画略厚' },
-                  { v: 600 as const, label: '加粗', note: '宋体可用' },
-                ].map((o) => (
-                  <button
-                    key={o.v}
-                    onClick={() => updateSettings({ previewWeight: o.v })}
-                    className={`rounded-lg px-3 py-1.5 text-[12px] transition ${
-                      settings.previewWeight === o.v
-                        ? 'bg-accent-50 text-accent-700 ring-1 ring-accent-300'
-                        : 'text-ink-600 ring-1 ring-ink-200 hover:bg-ink-50'
-                    }`}
-                    title={o.note}
-                  >
-                    {o.label}
-                  </button>
-                ))}
-              </div>
-              <p className="mt-1.5 text-[11px] leading-relaxed text-ink-400">
-                宋体只有常规一档，选「加粗」由系统合成加厚；装了思源宋体则用真实的 Medium / SemiBold。
-              </p>
-            </Row>
-
-            <Row label="导出字体">
-              <FontNameInput
-                value={settings.exportFontCustom}
-                placeholder="留空则与上面一致"
-                onChange={(v) => updateSettings({ exportFontCustom: v })}
-              />
-              <p className="mt-1.5 text-[11px] leading-relaxed text-ink-400">
-                只作用于导出的 HTML / PDF。想让屏幕用黑体、交稿用宋体，就在这里单独填一个。
-              </p>
-            </Row>
-          </section>
-
-          {/* ---------------- 编辑区 ---------------- */}
-          <section>
-            <SectionTitle>源码（编辑区）</SectionTitle>
-
-            <Row label="字体">
-              <div className="grid grid-cols-2 gap-2">
-                {EDITOR_FONTS.map((f) => (
-                  <ChoiceCard
-                    key={f.key}
-                    active={settings.editorFont === f.key}
-                    title={f.label}
-                    note={f.note}
-                    sampleStyle={{ fontFamily: editorFontStack(f.key as EditorFontKey) }}
-                    onClick={() => updateSettings({ editorFont: f.key })}
-                  />
-                ))}
-              </div>
-            </Row>
-
-            <Row label="自定义">
-              <FontNameInput
-                value={settings.editorFontCustom}
-                placeholder="等宽字体名，如 JetBrains Mono"
-                onChange={(v) => updateSettings({ editorFontCustom: v })}
-              />
-            </Row>
-
-            <Row label="字号">
-              <Slider
-                value={settings.editorFontSize}
-                min={11}
-                max={20}
-                step={0.5}
-                suffix="px"
-                onChange={(v) => updateSettings({ editorFontSize: v })}
-              />
-            </Row>
-
-            <div className="mt-2 rounded-xl border border-ink-200 bg-ink-50 px-3 py-2">
-              <div className="mb-1 text-[11px] font-medium text-ink-400">实时效果</div>
-              <div className="mf-academic">
-                <p style={{ margin: 0 }}>
-                  设 <em>f(x) = ax² + bx + c</em>，当 Δ &gt; 0 时方程有两个不等实根。这段即正文最终的字号、行距与字重。
-                </p>
-              </div>
-              <div
-                className="mt-2 rounded-lg bg-surface px-2.5 py-1.5 text-ink-700 ring-1 ring-ink-100"
-                style={{ fontFamily: editorFontStack(settings.editorFont), fontSize: settings.editorFontSize }}
-              >
-                <div className="text-ink-400">## 源码区</div>
-                <div>$$\int_0^1 x^2\,dx = \tfrac&#123;1&#125;&#123;3&#125;$$</div>
-              </div>
-            </div>
-          </section>
-        </div>
-
 
         {/* ---------------- 排印细节 ---------------- */}
         <div className="rounded-xl border border-ink-200 p-3">
@@ -565,6 +588,97 @@ export default function AppearanceModal({ open, onClose }: { open: boolean; onCl
 }
 
 /* ------------------------------------------------------------------ */
+
+type FontGroup = { label: string; items: Array<{ v: string; label: string; family?: string }> }
+
+/** 中文正文字体：四个预设 + 系统里常见的中文字体 */
+const CJK_FONT_GROUPS: FontGroup[] = [
+  {
+    label: '预设',
+    items: PREVIEW_FONTS.map((f) => ({ v: `preset:${f.key}`, label: f.label, family: f.stack })),
+  },
+  {
+    label: '系统字体',
+    items: SYSTEM_FONT_GROUPS.slice(0, 2)
+      .flatMap((g) => g.fonts)
+      .map((f) => ({
+        v: `font:${f.name}`,
+        label: f.hint ? `${f.name}（${f.hint}）` : f.name,
+        family: `'${f.name}'`,
+      })),
+  },
+]
+
+/** 西文正文字体 */
+const LATIN_FONT_GROUPS: FontGroup[] = [
+  {
+    label: '预设',
+    items: LATIN_FONTS.map((f) => ({ v: `preset:${f.key}`, label: f.label, family: f.stack || undefined })),
+  },
+  {
+    label: '系统字体',
+    items: SYSTEM_FONT_GROUPS[2].fonts.map((f) => ({ v: `font:${f.name}`, label: f.name, family: `'${f.name}'` })),
+  },
+]
+
+/** 源码区字体：先给几个预设，再列系统里的等宽与常用字体 */
+const EDITOR_FONT_GROUPS: FontGroup[] = [
+  {
+    label: '预设',
+    items: [
+      { v: 'preset:serif', label: '衬线（稿纸感）', family: editorFontStack('serif') },
+      { v: 'preset:mono', label: '等宽（对表格最准）', family: editorFontStack('mono') },
+      { v: 'preset:sans', label: '无衬线（长文省力）', family: editorFontStack('sans') },
+      { v: 'preset:kai', label: '霞鹜文楷（装了才生效）', family: editorFontStack('kai') },
+    ],
+  },
+  {
+    label: '等宽',
+    items: SYSTEM_FONT_GROUPS[3].fonts.map((f) => ({
+      v: `font:${f.name}`,
+      label: f.hint ? `${f.name}（${f.hint}）` : f.name,
+      family: `'${f.name}'`,
+    })),
+  },
+  {
+    label: '中文',
+    items: SYSTEM_FONT_GROUPS.slice(0, 2)
+      .flatMap((g) => g.fonts)
+      .map((f) => ({ v: `font:${f.name}`, label: f.name, family: `'${f.name}'` })),
+  },
+]
+
+/**
+ * 原生下拉式字体选择：每个选项用自己那套字体渲染，和浏览器 / 画图 / 记事本一个路数。
+ * 没装的字体照样列出来（浏览器自动回退），用户看得见名字才知道该装什么。
+ */
+function FontSelect({
+  value,
+  groups,
+  onChange,
+}: {
+  value: string
+  groups: FontGroup[]
+  onChange: (v: string) => void
+}) {
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="h-8 w-full rounded-lg border border-ink-200 bg-surface px-2 text-[12.5px] text-ink-800 outline-none focus:border-accent-400"
+    >
+      {groups.map((g) => (
+        <optgroup key={g.label} label={g.label}>
+          {g.items.map((i) => (
+            <option key={i.v} value={i.v} style={i.family ? { fontFamily: i.family } : undefined}>
+              {i.label}
+            </option>
+          ))}
+        </optgroup>
+      ))}
+    </select>
+  )
+}
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return <div className="mb-2 text-[12.5px] font-semibold text-ink-800">{children}</div>

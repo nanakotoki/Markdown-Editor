@@ -327,14 +327,21 @@ export const MANUAL_SECTIONS: ManualSection[] = [
         tag: '编号',
       },
       {
-        title: '英文文档：Theorem 1.1 + 斜体正文',
-        note: '容器里主要用英文写时，排版自动切成国际惯例：标签用 Theorem / Lemma / Definition / Proposition / Corollary / Example，标题是粗黑体；定理正文**斜体**；证明以粗体的 Proof. 开头、正文正体。中文文档不受影响（仍是黑体标签 + 楷体正文）。判定按整篇的语言，中英混排时以中文为准。',
+        title: '容器标题固定用中文',
+        note: '定理 / 证明这些容器不论正文写中文还是英文，标签都用「定理 1.1」「证明」，正文统一正体——同一篇文档里不会一半英文标题、一半中文标题，也不会因为英文段落多就把整段变成斜体。需要英文标签时可以直接写在标题里：`::: theorem [Theorem (Contraction)]`。',
         tag: '外观',
       },
       {
         title: '行间公式居中',
         note: '带编号的式子按**版心**居中（不是偏在一侧），编号单独靠右。公式太宽、放不下时，这条式子自己横向滚动，不会压到编号上。',
         tag: '排版',
+      },
+      {
+        title: '多行公式：条件与编号自动对齐',
+        syntax: j('$$', '\\begin{align}', 'f(x) &= x^{2}, && (x>0) \\\\', 'g(x) &= 1,   && (x<0)', '\\end{align}', '$$', '', '::: eqn gap=2em', '\\frac{\\partial u}{\\partial t} &= \\Delta u, && x\\in\\Omega \\\\', 'u(x,0) &= u_0(x), && x\\in\\partial\\Omega', ':::'),
+        note: '`&` 是列分隔符：奇数列右对齐、偶数列左对齐；连续写两个 `&` 会空出一列，把条件放在它后面，几行条件的左端就自动对齐，右侧编号也各占一列、右端对齐。某行不想要编号写 `\\nonumber`，想自己写编号用 `\\tag{...}`。列间距用 `::: eqn gap=2em` 调（默认 1.5em），写得再宽也不会把编号挤走。单行公式仍旧用 `$$ … $$`。',
+        block: true,
+        tag: '常用',
       },
       {
         title: '伪代码算法块',
@@ -393,6 +400,13 @@ export const MANUAL_SECTIONS: ManualSection[] = [
     title: '代码与其它',
     summary: '代码块、函数绘图、矩阵计算、真值表。',
     entries: [
+      {
+        title: 'HTML 实体与少量内联 HTML',
+        syntax: j('首行缩进两格：&emsp;&emsp;正文……', '不换行空格：A&nbsp;B　度数：30&deg;　乘号：2&times;3', '数字实体也行：&#8195; 与 &#x2003;', '', '<div align="center">居中的一段</div>'),
+        note: '`&emsp;`（全角空格）、`&ensp;`、`&thinsp;`、`&nbsp;`、`&hellip;`、`&mdash;`、`&times;`、`&deg;`、`&plusmn;`、`&alpha;` 这类命名实体，以及 `&#8195;` `&#x2003;` 数字实体，现在都会排成对应字符；以前 `&` 会被转义，页面上直接显示「&emsp;」这串字母。原始 HTML（`<span>`、`<div align="center">`）照旧生效。',
+        block: true,
+        tag: '省事',
+      },
       {
         title: '代码块',
         syntax: j(F + 'python', 'def grad(x):', '    return 2 * x', F),

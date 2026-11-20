@@ -101,13 +101,15 @@ html.dark {
 
 :root {
   /* 正文默认：西文 Times New Roman + 中文宋体。CSS 逐字回退，两段字体名就能混排 */
-  --mf-serif: 'Times New Roman', 'Nimbus Roman No9 L', 'Liberation Serif', Times, 'Source Han Serif SC', 'Noto Serif CJK SC', 'Songti SC', 'STSong', 'SimSun', serif;
+  --mf-serif: 'Times New Roman', 'Nimbus Roman No9 L', 'Liberation Serif', Times, 'Songti SC', 'SimSun', 'STSong', 'Source Han Serif SC', 'Noto Serif CJK SC', serif;
   --mf-sans: 'Inter', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
   --mf-mono: 'JetBrains Mono', 'Cascadia Code', 'Consolas', monospace;
   /* 外观设置会在运行时改写下面这几个变量（见 core/appearance.ts） */
-  --mf-academic-size: 16.5px;
-  --mf-academic-leading: 1.9;
-  --mf-academic-weight: 500;
+  --mf-academic-size: 15.5px;
+  --mf-academic-leading: 1.75;
+  --mf-academic-weight: 400;
+  /* 标题层级跨度：场景主题给基准，微调可再拉大 */
+  --mf-heading-scale: 1;
   --mf-editor-font: 'Latin Modern Roman', 'Songti SC', 'STSong', 'SimSun', Georgia, serif;
   --mf-editor-size: 15px;
   /* 楷体：定理正文、证明里的「证」字用它。装了霞鹜文楷会优先用，
@@ -366,9 +368,9 @@ body {
 .mf-academic {
   font-family: var(--mf-serif);
   color: var(--mf-ink);
-  font-size: var(--mf-academic-size, 16.5px);
-  line-height: var(--mf-academic-leading, 1.9);
-  font-weight: var(--mf-academic-weight, 500);
+  font-size: var(--mf-academic-size, 15.5px);
+  line-height: var(--mf-academic-leading, 1.75);
+  font-weight: var(--mf-academic-weight, 400);
   letter-spacing: 0.005em;
 }
 
@@ -395,20 +397,23 @@ body {
   scroll-margin-top: 24px;
 }
 .mf-academic h1.mf-heading {
-  font-size: 1.85em;
+  font-size: calc(1.9em * var(--mf-heading-scale, 1));
   margin-top: 0.2em;
   padding-bottom: 0.1em;
 }
 .mf-academic h2.mf-heading {
-  font-size: 1.35em;
+  font-size: calc(1.5em * var(--mf-heading-scale, 1));
   padding-left: 10px;
   border-left: 3px solid var(--mf-accent);
 }
 .mf-academic h3.mf-heading {
-  font-size: 1.12em;
+  font-size: calc(1.24em * var(--mf-heading-scale, 1));
   color: #2f3846;
 }
-.mf-academic h4.mf-heading,
+.mf-academic h4.mf-heading {
+  font-size: calc(1.1em * var(--mf-heading-scale, 1));
+  color: #37404f;
+}
 .mf-academic h5.mf-heading,
 .mf-academic h6.mf-heading {
   font-size: 1em;
@@ -625,6 +630,43 @@ body {
 .mf-eq-tag:hover {
   background: #eef4ff;
   color: var(--mf-accent);
+}
+
+/* ---------------- 公式组：多行公式，条件与编号按列对齐 ----------------
+   一行 = 一个表格行，列宽由整张表决定，所以条件左端、编号右端在行与行之间
+   天然对齐，不需要手敲空格。列间距用 --mf-eg-gap 控制（源码里 ::{gap=2em}）。 */
+.mf-eqgroup {
+  margin: 1em 0;
+  padding: 0.2em 0;
+  overflow-x: auto;
+}
+.mf-eg-table {
+  border-collapse: collapse;
+  margin: 0 auto;
+  max-width: 100%;
+}
+.mf-eg-table td {
+  padding: 0.16em 0;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+.mf-eg-table td.mf-eg-cr {
+  text-align: right;
+  /* 等号左边与等号之间只留一点缝；真正用来分开「条件列」的是 .mf-eg-cl 的间距 */
+  padding-right: 0.35em;
+}
+.mf-eg-table td.mf-eg-cl {
+  text-align: left;
+  padding-right: var(--mf-eg-gap, 1.5em);
+}
+.mf-eg-table td.mf-eg-no {
+  text-align: right;
+  padding-left: 2.2em;
+  font-family: var(--mf-serif);
+  font-size: 1.04em;
+  line-height: 1;
+  color: #1f2937;
+  white-space: nowrap;
 }
 
 /* 数学字形：Computer Modern 笔画偏细偏尖，
@@ -1288,6 +1330,15 @@ body {
 .mf-academic svg {
   max-width: 100%;
   height: auto;
+}
+/* KaTeX 的伸缩箭头 / 大括号是一张 400em 宽的 SVG，尺寸由 `.katex svg` 的
+   `width:100%` + `height:inherit` 决定，再靠 .hide-tail 裁出箭头那一截。
+   上面那条 max-width / height:auto 会把它按 viewBox 压成一根发丝 ——
+   现象就是「\xrightarrow{文字}」只剩箭头上的字、箭头本身不见了。
+   这里把这两条还回 KaTeX：宽度不设上限，高度继续继承父元素。 */
+.mf-academic .katex svg {
+  max-width: none;
+  height: inherit;
 }
 .mf-academic [align='center'],
 .mf-academic center {

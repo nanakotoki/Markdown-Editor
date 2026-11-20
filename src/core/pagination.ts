@@ -99,6 +99,12 @@ function isSplittable(el: HTMLElement): boolean {
 }
 
 /**
+ * 一段可拆块至少要在当前页留下多高，才值得拆。
+ * 太低的话（比如只剩一行）不如整体挪到下一页，免得两页都难看。
+ */
+const MIN_FRAG = 56
+
+/**
  * 把顶层块切成页（阅读模式 / 打印用）。
  * 返回每一页包含的单元；调用方据此渲染每张纸面。
  */
@@ -135,17 +141,45 @@ export function paginateElements(kids: HTMLElement[], safeH = readMetrics().safe
       continue
     }
 
-    if (isSplittable(el) && heightOf(el) > safeH * 0.72) {
-      const flow = flowOf(el) as HTMLElement
-      const parts = Array.from(flow.children) as HTMLElement[]
-      if (parts.length > 1) {
+    /**
+     * 证明 / 解答 / 手写容器：只要整块放不进当前页，就按段落拆开，
+     * 而不是整块推到下一页（那会在上一页留一大片空白）。
+     * 拆的前提是至少保留开头的标记（「证」「解」这些 span）加一个正文块。
+     */
+    if (isSplittable(el)) {
+      const flow = flowOf(el) as HTMLElement | null
+      const parts = flow ? (Array.from(flow.children) as HTMLElement[]) : []
+      const top = topOf(el)
+      const h = heightOf(el)
+      if (parts.length > 1 && (h > safeH * 0.72 || top + h - pageTop > safeH)) {
+        const bounds = parts.map((p) => {
+          const r = p.getBoundingClientRect()
+          return { t: r.top - base, b: r.bottom - base }
+        })
+        // 开头的「证」「解」是行内 span，不能单独留在页尾
+        let prefix = 0
+        while (prefix < parts.length && parts[prefix].tagName === 'SPAN') prefix++
+        const minKeep = Math.min(parts.length, prefix + 1)
+
+        let breakAt = -1
         for (let c = 0; c < parts.length; c++) {
-          const t = parts[c].getBoundingClientRect().top - base
-          const b = t + parts[c].getBoundingClientRect().height
-          // 首段带上容器顶部装饰与外层边距，多留一点空间判断
-          const unitTop = c === 0 ? topOf(el) : t
-          if (b - pageTop > safeH && cur.length > 0) breakPage(unitTop)
-          cur.push({ el, child: c })
+          if (bounds[c].b - pageTop > safeH && cur.length + c > 0) {
+            breakAt = c
+            break
+          }
+        }
+
+        if (breakAt < 0) {
+          // 整块放得下
+          for (let c = 0; c < parts.length; c++) cur.push({ el, child: c })
+        } else if (cur.length > 0 && (breakAt === 0 || breakAt < minKeep || bounds[breakAt - 1].b - top < MIN_FRAG)) {
+          // 拆开也留不下像样的一段：整块换页
+          breakPage(top)
+          for (let c = 0; c < parts.length; c++) cur.push({ el, child: c })
+        } else {
+          for (let c = 0; c < breakAt; c++) cur.push({ el, child: c })
+          breakPage(bounds[breakAt].t)
+          for (let c = breakAt; c < parts.length; c++) cur.push({ el, child: c })
         }
         continue
       }

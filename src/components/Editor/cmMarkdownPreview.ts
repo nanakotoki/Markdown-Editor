@@ -1,7 +1,7 @@
 import { Decoration, EditorView, WidgetType, type DecorationSet } from '@codemirror/view'
 import { EditorState, RangeSetBuilder, StateField } from '@codemirror/state'
-import { scanMath } from '../../core/katexSafeRender'
-import { renderMarkdown } from '../../core/renderMarkdown'
+import { scanMath, type MacroMap } from '../../core/katexSafeRender'
+import { alignGroupHtml, eqNumberPlan, parseAlignRows, renderMarkdown } from '../../core/renderMarkdown'
 import { DIRECTIVE_CN, buildRefIndex, type NumberingConfig } from '../../core/numbering'
 
 /**
@@ -128,6 +128,25 @@ class PageBreak extends WidgetType {
   }
 }
 
+/** `::: eqn` 公式组：整块换成一个对齐好的表格，和阅读模式里长得一样 */
+class EqnWidget extends WidgetType {
+  constructor(readonly html: string) {
+    super()
+  }
+  eq(other: EqnWidget) {
+    return other.html === this.html
+  }
+  toDOM() {
+    const el = document.createElement('div')
+    el.className = 'mf-cm-block'
+    el.innerHTML = this.html
+    return el
+  }
+  ignoreEvent() {
+    return false
+  }
+}
+
 interface Item {
   from: number
   to: number
@@ -138,13 +157,14 @@ function overlaps(from: number, to: number, a: number, b: number): boolean {
   return a < to && b > from
 }
 
-function build(state: EditorState, numbering: NumberingConfig): DecorationSet {
+function build(state: EditorState, numbering: NumberingConfig, macros: MacroMap): DecorationSet {
   const items: Item[] = []
   const doc = state.doc
   const sel = state.selection.main
   const text = doc.toString()
   const mathRanges = scanMath(text)
   const refIndex = buildRefIndex(text, numbering)
+  const eqPlan = eqNumberPlan(text, numbering)
 
   const inMath = (from: number, to: number) => mathRanges.some((r) => overlaps(from, to, r.from, r.to))
 
@@ -181,6 +201,32 @@ function build(state: EditorState, numbering: NumberingConfig): DecorationSet {
     const quote = /^(>\s?)/.exec(raw)
     if (quote && !lineTouched) {
       items.push({ from: line.from, to: line.from + quote[0].length, deco: hide })
+    }
+
+    // ::: eqn 公式组：整块渲染成对齐好的表格（光标进入后恢复源码）
+    const eqnOpen = /^:::+[ \t]*(eqn|eqgroup|equation-group)\b(.*)$/i.exec(raw)
+    if (eqnOpen) {
+      const body: string[] = []
+      let last = i + 1
+      while (last <= doc.lines && !/^\s*:::\s*$/.test(doc.line(last).text)) {
+        body.push(doc.line(last).text)
+        last++
+      }
+      const from = line.from
+      const to = last <= doc.lines ? doc.line(last).to : doc.line(doc.lines).to
+      if (!overlaps(from, to, sel.from, sel.to)) {
+        const gapM = /(?:gap|sep)\s*=\s*([\d.]+)\s*(em|px|pt|rem)?/i.exec(eqnOpen[2] ?? '')
+        const rows = parseAlignRows(`\\begin{align}\n${body.join('\n')}\n\\end{align}`)
+        const html = alignGroupHtml({
+          rows,
+          tags: eqPlan.get(from) ?? [],
+          gap: gapM ? `${gapM[1]}${gapM[2] ?? 'em'}` : undefined,
+          macros,
+        })
+        items.push({ from, to, deco: Decoration.replace({ block: true, widget: new EqnWidget(html) }) })
+        i = last
+        continue
+      }
     }
 
     // ::: 容器：隐藏标记，把英文环境名换成「定义 1.1」这样的中文标签
@@ -303,11 +349,14 @@ function build(state: EditorState, numbering: NumberingConfig): DecorationSet {
   return builder.finish()
 }
 
-export function markdownPreviewPlugin(getNumbering: () => NumberingConfig = () => ({ thm: 'section', eq: 'global', eqTag: 'paren' })) {
+export function markdownPreviewPlugin(
+  getNumbering: () => NumberingConfig = () => ({ thm: 'section', eq: 'global', eqTag: 'paren' }),
+  getMacros: () => MacroMap = () => ({})
+) {
   return StateField.define<DecorationSet>({
-    create: (state) => build(state, getNumbering()),
+    create: (state) => build(state, getNumbering(), getMacros()),
     update(value, tr) {
-      if (tr.docChanged || tr.selection) return build(tr.state, getNumbering())
+      if (tr.docChanged || tr.selection) return build(tr.state, getNumbering(), getMacros())
       return value.map(tr.changes)
     },
     provide: (f) => EditorView.decorations.from(f),

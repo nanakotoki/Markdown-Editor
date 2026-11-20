@@ -3,6 +3,7 @@ import { renderMarkdown, buildPreviewMap, type RefEntry, type RenderResult } fro
 import type { MacroMap } from '../../core/katexSafeRender'
 import { useEditorStore, type BibEntry, type Settings } from '../../store/useEditorStore'
 import { desktop } from '../../core/desktop'
+import { lineAtContainerTop, scrollContainerToLine } from '../../core/viewAnchor'
 import PaginatedSheets from './PaginatedSheets'
 
 /**
@@ -36,6 +37,10 @@ export interface AcademicPreviewProps {
   /** 当前文件在工作区里的相对路径，如 `论文/ch1.md`。
    *  有了它，`![](figs/a.png)` 与 `<img src="figs/a.png">` 才能取到工作区里的图片 */
   docPath?: string
+  /** 打开时先滚到这一行（切换视图时保持位置用） */
+  initialLine?: number
+  /** 滚动时上报视口顶部行号 */
+  onViewportLine?: (line: number) => void
 }
 
 interface HoverCard {
@@ -62,10 +67,18 @@ export default function AcademicPreview({
   mode = 'preview',
   docTitle = '',
   docPath,
+  initialLine = 0,
+  onViewportLine,
 }: AcademicPreviewProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const [hover, setHover] = useState<HoverCard | null>(null)
   const [pageTotal, setPageTotal] = useState(0)
+
+  /** 挂载时读到的一次性目标行：只在本次挂载时用，之后滚动由用户说了算 */
+  const targetLineRef = useRef(initialLine)
+  const viewportLineRef = useRef(onViewportLine)
+  viewportLineRef.current = onViewportLine
+  const restoredRef = useRef(false)
 
   /** 把内部滚动容器同时交给外层（滚动联动要用） */
   const attachScroll = (el: HTMLDivElement | null) => {
@@ -142,6 +155,63 @@ export default function AcademicPreview({
     onRender?.(result)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [result])
+
+  /* 换文件时重新允许「恢复位置」；同一篇文档内部的内容变化不重来 */
+  useEffect(() => {
+    restoredRef.current = false
+    targetLineRef.current = initialLine
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [docPath])
+
+  /**
+   * 进入本视图时滚到上次停留的源码行。
+   * 阅读模式要等分页算完（pageTotal > 0）再定位，否则量尺还没铺开。
+   */
+  useEffect(() => {
+    if (restoredRef.current) return
+    const line = targetLineRef.current
+    if (!line || line <= 1) {
+      restoredRef.current = true
+      return
+    }
+    const root = scrollRef.current
+    if (!root) return
+    if (mode === 'read' && pageTotal === 0) return
+    let cancelled = false
+    let tries = 0
+    const tick = () => {
+      if (cancelled || restoredRef.current) return
+      if (scrollContainerToLine(root, line)) {
+        restoredRef.current = true
+        return
+      }
+      if (tries++ < 20) window.setTimeout(tick, 80)
+    }
+    tick()
+    return () => {
+      cancelled = true
+    }
+  }, [mode, pageTotal, initialLine])
+
+  /** 滚动时把「当前看到第几行」报给外面，供下次切换视图恢复 */
+  useEffect(() => {
+    const root = scrollRef.current
+    if (!root) return
+    let raf = 0
+    const onScroll = () => {
+      if (raf) return
+      raf = requestAnimationFrame(() => {
+        raf = 0
+        const line = lineAtContainerTop(root)
+        if (line > 0) viewportLineRef.current?.(line)
+      })
+    }
+    root.addEventListener('scroll', onScroll, { passive: true })
+    return () => {
+      if (raf) cancelAnimationFrame(raf)
+      root.removeEventListener('scroll', onScroll)
+    }
+  }, [mode])
 
   /* 悬停气泡 */
   useEffect(() => {

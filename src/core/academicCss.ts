@@ -20,17 +20,18 @@ export const ACADEMIC_CSS = `
 --mf-mono:'JetBrains Mono','Cascadia Code',Consolas,monospace;
 --mf-kai:'LXGW WenKai','Kaiti SC','STKaiti','KaiTi','Source Han Serif SC','Noto Serif CJK SC','Songti SC',serif;
 --mf-thm-head-font:var(--mf-sans);--mf-proof-mark-font:var(--mf-kai);--mf-sol-mark-font:var(--mf-serif);
---mf-academic-weight:500;
+--mf-academic-weight:400;--mf-heading-scale:1;
 --mf-rule:#1f2733;--mf-accent:#2a55d4;}
 *{box-sizing:border-box}
 html,body{margin:0;padding:0;background:#f3f5f8;color:#1f2733}
 a{color:var(--mf-accent)}
 .mf-page{max-width:880px;margin:0 auto;background:#fff;padding:56px 64px 96px;box-shadow:0 12px 40px -20px rgba(20,26,35,.35)}
-.mf-academic{font-family:var(--mf-serif);font-size:16.5px;line-height:1.9;font-weight:var(--mf-academic-weight,500)}
+.mf-academic{font-family:var(--mf-serif);font-size:15.5px;line-height:1.75;font-weight:var(--mf-academic-weight,400)}
 .mf-heading{font-family:var(--mf-sans);color:#141a23;font-weight:700;line-height:1.45;margin:1.5em 0 .6em}
-h1.mf-heading{font-size:1.85em;margin-top:0;padding-bottom:.1em}
-h2.mf-heading{font-size:1.35em;padding-left:10px;border-left:3px solid var(--mf-accent)}
-h3.mf-heading{font-size:1.12em}
+h1.mf-heading{font-size:calc(1.9em * var(--mf-heading-scale,1));margin-top:0;padding-bottom:.1em}
+h2.mf-heading{font-size:calc(1.5em * var(--mf-heading-scale,1));padding-left:10px;border-left:3px solid var(--mf-accent)}
+h3.mf-heading{font-size:calc(1.24em * var(--mf-heading-scale,1))}
+h4.mf-heading{font-size:calc(1.1em * var(--mf-heading-scale,1))}
 .mf-p{margin:.75em 0;text-align:justify}
 .mf-quote{margin:1em 0;padding:.55em 1em;border-left:3px solid #c6ccd8;background:#f8f9fb;color:#414b5c}
 .mf-list{margin:.6em 0;padding-left:1.7em}
@@ -49,6 +50,12 @@ h3.mf-heading{font-size:1.12em}
 .mf-eq-no{position:absolute;right:0;top:50%;transform:translateY(-50%);padding-left:1.2em;font-family:var(--mf-serif);font-size:1.08em;line-height:1;white-space:nowrap;color:#1f2937}
 .mf-eq-tag{color:inherit;text-decoration:none}
 .mf-eq-tag:hover{color:var(--mf-accent)}
+.mf-eqgroup{margin:1em 0;padding:.2em 0;overflow-x:auto}
+.mf-eg-table{border-collapse:collapse;margin:0 auto;max-width:100%}
+.mf-eg-table td{padding:.16em 0;vertical-align:middle;white-space:nowrap}
+.mf-eg-table td.mf-eg-cr{text-align:right;padding-right:.35em}
+.mf-eg-table td.mf-eg-cl{text-align:left;padding-right:var(--mf-eg-gap,1.5em)}
+.mf-eg-table td.mf-eg-no{text-align:right;padding-left:2.2em;font-family:var(--mf-serif);font-size:1.04em;line-height:1;color:#1f2937;white-space:nowrap}
 .mf-eq-body .katex-display>.katex>.katex-html{display:flex;align-items:center;justify-content:center}
 .mf-eq-body .katex-display>.katex>.katex-html>.base{flex:none}
 .mf-eq-body .katex-display>.katex>.katex-html>.tag{position:static!important;flex:none;margin-left:1.4em}

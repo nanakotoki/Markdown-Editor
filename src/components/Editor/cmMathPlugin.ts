@@ -2,6 +2,7 @@ import { Decoration, EditorView, WidgetType, type DecorationSet } from '@codemir
 import { EditorState, RangeSetBuilder, StateEffect, StateField } from '@codemirror/state'
 import { renderMathSafely, scanMath, type MacroMap, type MathRange } from '../../core/katexSafeRender'
 import { eqTagsForText, type EqNumbering, type EqTagStyle } from '../../core/numbering'
+import { alignGroupHtml, eqNumberPlan, isAlignBlock, parseAlignRows } from '../../core/renderMarkdown'
 
 /**
  * ============================================================================
@@ -60,6 +61,8 @@ function buildDecorations(state: EditorState, macros: MacroMap, numbering: Edito
   const ranges = scanMath(text)
   const items: DecoItem[] = []
   const tags = eqTagsForText(text, numbering)
+  /* 公式组要按行编号：和预览共用同一套推算，编号才不会被两套算法拉开 */
+  const plan = eqNumberPlan(text, numbering)
 
   for (const r of ranges) {
     const touches = sel.from <= r.to && sel.to >= r.from
@@ -108,10 +111,16 @@ function buildDecorations(state: EditorState, macros: MacroMap, numbering: Edito
     }
 
     // 渲染态
-    const rendered = renderMathSafely(r.latex, r.type === 'display', macros, {
-      tag: r.type === 'display' ? r.number : undefined,
-      tagLabel: r.type === 'display' && r.number ? tags.get(r.number) : undefined,
-    })
+    // 公式组（align）自己就是一个表格：条件与编号各占一列，交给渲染管线同一套代码
+    const alignRows =
+      r.type === 'display' && isAlignBlock(r.latex) ? parseAlignRows(r.latex) : null
+    const blockKey = state.doc.lineAt(r.from).from
+    const rendered = alignRows
+      ? { ok: true, html: alignGroupHtml({ rows: alignRows, tags: plan.get(blockKey) ?? [], macros }) }
+      : renderMathSafely(r.latex, r.type === 'display', macros, {
+          tag: r.type === 'display' ? r.number : undefined,
+          tagLabel: r.type === 'display' && r.number ? tags.get(r.number) : undefined,
+        })
     if (r.type === 'display') {
       const lineFrom = state.doc.lineAt(r.from)
       const lineTo = state.doc.lineAt(r.to)

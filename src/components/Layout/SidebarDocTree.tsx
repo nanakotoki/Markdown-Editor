@@ -23,7 +23,7 @@ export default function SidebarDocTree({ toc, onJump }: { toc: TocItem[]; onJump
     docs,
     activeDocId,
     setActiveDoc,
-    createDoc,
+    openNewDoc,
     deleteDoc,
     sidebarTab,
     setSidebarTab,
@@ -59,7 +59,7 @@ export default function SidebarDocTree({ toc, onJump }: { toc: TocItem[]; onJump
         {sidebarTab === 'docs' && mode === 'sandbox' && (
           <div className="space-y-1">
             <button
-              onClick={() => createDoc()}
+              onClick={() => openNewDoc()}
               className="mb-1.5 flex w-full items-center gap-1.5 rounded-lg border border-dashed border-ink-200 px-2.5 py-1.5 text-[12px] text-ink-500 transition hover:border-accent-300 hover:text-accent-600"
             >
               <Plus size={13} /> 新建文档

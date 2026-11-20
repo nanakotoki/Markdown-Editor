@@ -71,6 +71,7 @@ export async function buildStandaloneHtml(markdown: string, opts: HtmlExportOpti
     `font-size:${settings.previewFontSize}px`,
     `line-height:${settings.previewLineHeight}`,
     `font-weight:${settings.previewWeight}`,
+    `--mf-heading-scale:${settings.headingScale ?? 1}`,
   ].join(';')
   const html = `<!doctype html>
 <html lang="zh-CN" data-thm-style="${esc(settings.thmStyle)}" data-math-style="${esc(settings.mathStyle)}">
