@@ -460,7 +460,7 @@ export const MANUAL_SECTIONS: ManualSection[] = [
       {
         title: '图片用相对路径',
         syntax: '![](figs/plot.png)',
-        note: '相对路径按**当前文件所在目录**解析，直接读工作区磁盘上的文件；`<img src="figs/plot.png">` 也一样。放进 `figs/` 子目录、在正文里写 `figs/plot.png` 即可，不用转成 base64。',
+        note: '相对路径按**当前文件所在目录**解析，直接读工作区磁盘上的文件；`<img src="figs/plot.png">` 也一样。放进 `figs/` 子目录、在正文里写 `figs/plot.png` 即可，不用转成 base64。文档在子目录、图在隔壁目录时写 `../outputs/plot.png` 也能取到（`C:/…/plot.png` 这种盘符路径、`file:///` 地址、Windows 反斜杠都认）；工作区以外的文件只放行家目录里的图片与音视频。路径写错时纸面上会出现一个虚线框，把源码里写的那串路径原样印出来，照着改就行。',
       },
       {
         title: '原生表格 / 图注',

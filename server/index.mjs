@@ -1,5 +1,6 @@
 import http from 'node:http'
 import { promises as fs, watch } from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createHash } from 'node:crypto'
@@ -71,9 +72,13 @@ const MIME = {
   '.pdf': 'application/pdf',
   '.mp4': 'video/mp4',
   '.webm': 'video/webm',
+  '.mov': 'video/quicktime',
+  '.m4v': 'video/mp4',
   '.ogg': 'audio/ogg',
   '.mp3': 'audio/mpeg',
   '.wav': 'audio/wav',
+  '.m4a': 'audio/mp4',
+  '.flac': 'audio/flac',
   '.avif': 'image/avif',
   '.bmp': 'image/bmp',
   '.csv': 'text/csv; charset=utf-8',
@@ -239,6 +244,47 @@ async function serveStatic(req, res, distDir, embedded = null) {
 /* 工作区静态资源（/ws/…）                                             */
 /* ------------------------------------------------------------------ */
 
+/** 越出工作区时允许读的类型：图片与音视频（文档引用隔壁目录的一张图是正常需求） */
+const ASSET_MEDIA_EXT = new Set([
+  '.png',
+  '.jpg',
+  '.jpeg',
+  '.gif',
+  '.webp',
+  '.avif',
+  '.bmp',
+  '.ico',
+  '.svg',
+  '.mp4',
+  '.webm',
+  '.mov',
+  '.m4v',
+  '.mp3',
+  '.wav',
+  '.m4a',
+  '.ogg',
+  '.flac',
+])
+
+/**
+ * 把请求里的资源路径解析成绝对路径。
+ *   · 普通相对路径 → 相对工作区根
+ *   · `../x`、`C:/…`（文档在子目录、图在隔壁的情形）→ 允许，但只放行家目录里的图片与音视频
+ * 其余越界请求一律 403：工作区文件可以整份读，工作区外的只认媒体文件。
+ */
+function resolveAssetAbs(root, rel) {
+  const raw = String(rel ?? '').replace(/\\/g, '/')
+  if (raw.includes('\u0000')) throw new HttpError(400, '路径包含非法字符')
+  const absRoot = path.resolve(root)
+  const winAbs = /^[A-Za-z]:\//.test(raw)
+  const abs = winAbs ? path.resolve(raw) : path.resolve(absRoot, raw)
+  if (abs === absRoot || abs.startsWith(absRoot + path.sep)) return abs
+  const ext = path.extname(abs).toLowerCase()
+  const home = os.homedir()
+  if (ASSET_MEDIA_EXT.has(ext) && abs.startsWith(home + path.sep)) return abs
+  throw new HttpError(403, '只能读取工作区内的文件，或家目录里的图片、音视频')
+}
+
 /**
  * 让文档里的相对路径能直接取到工作区里的文件：
  *   `![](figs/a.png)`、`<img src="figs/a.png">`、`<video src="demo.mp4">`
@@ -249,13 +295,32 @@ async function serveStatic(req, res, distDir, embedded = null) {
  */
 async function serveWorkspaceAsset(req, res, root) {
   const url = new URL(req.url, 'http://localhost')
-  const rel = decodeURIComponent(url.pathname).replace(/^\/ws\/?/, '')
+  // 两种写法：`/ws/<相对路径>`；越出工作区的路径用 `/ws?p=..%2Foutputs%2Fa.png`
+  //（浏览器会先把 URL 里的 `../` 规整掉，只有查询串能原样带过去）
+  const q = url.searchParams.get('p')
+  let rel
+  if (q != null) rel = q
+  else {
+    try {
+      rel = decodeURIComponent(url.pathname).replace(/^\/ws\/?/, '')
+    } catch {
+      res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' }).end('Bad Request')
+      return
+    }
+  }
   if (!rel) {
     res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }).end('Not Found')
     return
   }
 
-  const abs = safeJoin(root, rel)
+  let abs
+  try {
+    abs = resolveAssetAbs(root, rel)
+  } catch (err) {
+    const status = err instanceof HttpError ? err.status : 400
+    res.writeHead(status, { 'Content-Type': 'text/plain; charset=utf-8' }).end(err?.message ?? 'Bad Request')
+    return
+  }
   let stat
   try {
     stat = await fs.stat(abs)
@@ -535,7 +600,7 @@ export function createApp({
         await handleApi(req, res, absRoot, opts)
         return
       }
-      if (req.url.startsWith('/ws/')) {
+      if (/^\/ws(?:\/|\?|$)/.test(req.url)) {
         await serveWorkspaceAsset(req, res, absRoot)
         return
       }

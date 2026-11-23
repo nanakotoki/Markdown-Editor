@@ -260,6 +260,8 @@ Windows 可能弹出蓝色的「Windows 已保护你的电脑」。
   <kbd>Ctrl</kbd>、<mark>重点</mark>          按键框、荧光笔；上下标、注音、术语表也能用
   <details><summary>…</summary>…</details>   折叠块，阅读模式与打印时自动展开
   <img src="figs/a.png">                    图片用相对路径，按当前文件所在目录找
+  ../outputs/a.png、C:/x/a.png             文档在子目录、图在隔壁也能取（工作区外只放行图片与音视频）
+  取不到时纸面会画一个虚线框，把写错的那串路径印出来，照着改
   <table> + <caption>                       自动排成三线表，caption 当表题
   <div align="center" markdown="1">…</div>  容器里照常写 Markdown 和公式
   <style> … </style>                        整篇生效，可以自定义排版

@@ -41,6 +41,10 @@ h4.mf-heading{font-size:calc(1.1em * var(--mf-heading-scale,1))}
 .mf-code-inner{background:none;color:#2f3846;padding:0}
 .mf-link{color:var(--mf-accent);text-decoration:none;border-bottom:1px solid rgba(42,85,212,.35)}
 .mf-img{max-width:100%}
+.mf-img-fail{display:none}
+.mf-img[data-broken]{display:none}
+.mf-img[data-broken]+.mf-img-fail{display:block;padding:.7em .9em;border:1px dashed #c8cfdb;border-radius:6px;background:#fafbfc;color:#8b93a1;font-size:.86em;line-height:1.65;text-align:left}
+.mf-img-fail code{display:block;margin-top:.2em;color:#6b7280;font-size:.95em;word-break:break-all}
 .mf-hr{border:none;border-top:1px solid #e6e9ef;margin:1.8em 0}
 .mf-display{margin:.9em 0;overflow-x:auto;overflow-y:hidden}
 .mf-display .katex-display{margin:.45em auto}

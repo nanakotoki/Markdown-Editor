@@ -178,6 +178,10 @@ export function decodeHtmlEntities(text: string): string {
  * 前缀允许带协议与主机（`http://127.0.0.1:4321/ws/notes`）：
  * 导出 PDF 时打印页是从本地服务取的一个地址，图片必须带回完整主机名，
  * 否则会被当成 `/ws/…` 这种站点绝对路径，在打印窗口里解析到不存在的位置。
+ *
+ * 有一类路径拼完会跑到工作区外面（文档在 `work/` 里，图在隔壁 `outputs/`，
+ * 只写 `../outputs/a.png` 就够）。这种不能直接写成 URL——浏览器会把 `../` 规整掉，
+ * 请求打到别的地方去。所以改成查询串 `/ws?p=..%2Foutputs%2Fa.png`，交给服务端解析。
  */
 export function joinAssetPath(base: string, rel: string): string {
   const m = /^([^?#]*)([?#].*)?$/.exec(rel)
@@ -187,16 +191,24 @@ export function joinAssetPath(base: string, rel: string): string {
   const originMatch = /^([A-Za-z][A-Za-z0-9+.-]*:\/\/[^/]+)(\/[\s\S]*)?$/.exec(base)
   const origin = originMatch ? originMatch[1] : ''
   const basePath = originMatch ? (originMatch[2] ?? '') : base
-  const segs = basePath.split('/').filter(Boolean)
+  // `/ws` 是挂载点，它上面的段不能再 pop，再往上就是「越出工作区」
+  const mountAt = basePath.search(/\/ws(\/|$)/)
+  const mount = mountAt === -1 ? '' : basePath.slice(0, mountAt + 3)
+  const docDir = mountAt === -1 ? '' : basePath.slice(mountAt + 3).replace(/^\/+/, '')
+  const segs = docDir ? docDir.split('/').filter(Boolean) : []
   for (const part of pathPart.split('/')) {
     if (!part || part === '.') continue
     if (part === '..') {
-      segs.pop()
+      if (segs.length && segs[segs.length - 1] !== '..') segs.pop()
+      else segs.push('..')
       continue
     }
     segs.push(part)
   }
-  return origin + '/' + segs.map((s) => encodeURI(s)).join('/') + tail
+  if (segs[0] === '..') {
+    return `${origin}${mount}?p=${encodeURIComponent(segs.join('/'))}${tail}`
+  }
+  return `${origin}${mount}/${segs.map((s) => encodeURI(s)).join('/')}${tail}`
 }
 
 /** `<div markdown="1">…</div>`：中间没有空行时，remark 会把整块当原始 HTML，
@@ -637,7 +649,22 @@ interface Ctx extends Required<Pick<RenderOptions, 'macros'>> {
 
 /** 渲染阶段改写相对路径（预览专用）：导出留相对路径，方便整个目录拷走 */
 function assetUrl(src: string, ctx: Ctx): string {
-  const s = (src ?? '').trim()
+  let s = (src ?? '').trim()
+  // CommonMark 允许 `![a](<a b.png>)`：尖括号是语法，不属于文件名
+  if (s.startsWith('<') && s.endsWith('>')) s = s.slice(1, -1).trim()
+  // Windows 的反斜杠在 URL 里没有意义，统一成 /
+  s = s.replace(/\\/g, '/')
+  // file:///C:/x.png（从别处粘过来的文档常见）：剥掉协议，当盘符路径处理
+  const fileUrl = /^file:\/\/\/([A-Za-z]:\/.*)$/i.exec(s)
+  if (fileUrl) {
+    try {
+      s = decodeURI(fileUrl[1])
+    } catch {
+      s = fileUrl[1]
+    }
+  }
+  // 盘符绝对路径交给 /ws 的绝对模式（服务端只放行图片与音视频，见 serveWorkspaceAsset）
+  if (/^[A-Za-z]:\//.test(s)) return `/ws/${encodeURI(s)}`
   if (!ctx.assetBase || !s || ABS_SRC_RE.test(s)) return s
   return joinAssetPath(ctx.assetBase, s)
 }
@@ -1459,6 +1486,16 @@ function renderTableBlock(node: any, ctx: Ctx): string {
   }${renderChildren(children, ctx)}</div>`
 }
 
+/**
+ * 图片取不到的时候不能留一片空白（下面那片空白让人以为排版坏了）。
+ * 占位框把源码里写的路径原样打出来——十有八九是路径写错，看见路径就能改。
+ */
+const IMG_ONERROR = `onerror="this.setAttribute('data-broken','1')"`
+
+function imgFallback(url: string): string {
+  return `<span class="mf-img-fail">图片没能加载：<code>${escapeHtml(url)}</code></span>`
+}
+
 function renderImageFigure(node: any, img: any, ctx: Ctx): string {
   const id = node.data?.mfFigId as string | undefined
   const no = node.data?.mfCaptionNo as string | undefined
@@ -1466,7 +1503,7 @@ function renderImageFigure(node: any, img: any, ctx: Ctx): string {
   const kind = ctx.lang === 'en' ? 'Figure' : '图'
   return `<figure class="mf-figure"${id ? ` id="${anchorOf(id)}"` : ''}><img class="mf-img" src="${escapeHtml(
     assetUrl(img.url ?? '', ctx)
-  )}" alt="${escapeHtml(img.alt ?? '')}" />${
+  )}" alt="${escapeHtml(img.alt ?? '')}" ${IMG_ONERROR} />${imgFallback(img.url ?? '')}${
     no ? `<figcaption class="mf-caption">${caption(`${kind} ${no}`, title)}</figcaption>` : ''
   }</figure>`
 }
@@ -1544,7 +1581,9 @@ function renderInlineNode(node: any, ctx: Ctx): string {
     case 'link':
       return `<a class="mf-link" href="${escapeHtml(node.url ?? '#')}" target="_blank" rel="noreferrer">${renderInline(node.children ?? [], ctx)}</a>`
     case 'image':
-      return `<img class="mf-img" src="${escapeHtml(assetUrl(node.url ?? '', ctx))}" alt="${escapeHtml(node.alt ?? '')}" />`
+      return `<img class="mf-img" src="${escapeHtml(assetUrl(node.url ?? '', ctx))}" alt="${escapeHtml(
+        node.alt ?? ''
+      )}" ${IMG_ONERROR} />${imgFallback(node.url ?? '')}`
     case 'break':
       return '<br />'
     case 'html':

@@ -524,6 +524,32 @@ body {
   border-radius: 6px;
 }
 
+/* 图片取不到时留个说明，别让纸面无故空一块 */
+.mf-academic .mf-img-fail {
+  display: none;
+}
+.mf-academic .mf-img[data-broken] {
+  display: none;
+}
+.mf-academic .mf-img[data-broken] + .mf-img-fail {
+  display: block;
+  padding: 0.7em 0.9em;
+  border: 1px dashed #c8cfdb;
+  border-radius: 6px;
+  background: #fafbfc;
+  color: #8b93a1;
+  font-size: 0.86em;
+  line-height: 1.65;
+  text-align: left;
+}
+.mf-academic .mf-img-fail code {
+  display: block;
+  margin-top: 0.2em;
+  color: #6b7280;
+  font-size: 0.95em;
+  word-break: break-all;
+}
+
 .mf-academic .mf-hr {
   border: none;
   border-top: 1px solid #e6e9ef;
